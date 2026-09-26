@@ -81,8 +81,9 @@ The web map and admin panel are at `https://your-server/` (login in `~/takcx/adm
 3. [Maps, offline use and radios](docs/3-maps-offline-radio.md): offline maps, no-server mode, Meshtastic, ham radio rules
 4. [Team radio](docs/4-radio.md): push-to-talk voice channels
 5. [Plugins and extras](docs/5-plugins.md): push plugins to everyone, aircraft on the map, live video
-6. [Troubleshooting](docs/troubleshooting.md)
-7. [Backups, restore and upgrades](docs/maintenance.md)
+6. [Meshtastic gear](docs/6-meshtastic-gear.md): which off-grid radios to buy and how to set them up
+7. [Troubleshooting](docs/troubleshooting.md)
+8. [Backups, restore and upgrades](docs/maintenance.md)
 
 ## What's in this repo
 

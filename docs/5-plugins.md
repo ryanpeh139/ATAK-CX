@@ -21,7 +21,7 @@ also on the Play Store or GitHub. Check each one's page for your ATAK version.
 |---|---|---|
 | **Data Sync** | Shared "missions": everyone subscribed sees the same markers, shapes and files, which stay in sync | SAR incidents, planned hunts and trips |
 | **Vx** | Push-to-talk voice inside ATAK, using your [team radio](4-radio.md) | Radio without switching apps |
-| **Meshtastic plugin** | Positions and chat over Meshtastic LoRa radios, with no cell service needed | Backcountry, SAR ([more](3-maps-offline-radio.md#meshtastic-long-range-off-grid)) |
+| **Meshtastic plugin** | Positions and chat over Meshtastic LoRa radios, with no cell service needed | Backcountry, SAR ([gear guide](6-meshtastic-gear.md)) |
 | **UAS Tool** | Drone video and position on the map | SAR with a drone |
 | **Fire Area Survey** | Structured survey and assessment of an area (OpenTAKServer supports its data) | Damage and area assessments |
 

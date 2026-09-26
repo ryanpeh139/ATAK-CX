@@ -62,7 +62,7 @@ internet comes back, the server connection picks back up.
 with your phone over Bluetooth and relay messages for miles, with no cell
 network or license needed. With the **Meshtastic ATAK plugin**, ATAK sends
 positions (PLI) and chat over the radios, which fits hunting, backcountry and SAR
-well. See Meshtastic's docs for the ATAK plugin setup.
+well. **Which radios to buy and how to set them up: [Meshtastic gear](6-meshtastic-gear.md).**
 
 **Bridge the mesh to your server** (optional): OpenTAKServer can link a
 Meshtastic network to everyone on the server, so people on radios show up on
