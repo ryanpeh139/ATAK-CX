@@ -12,10 +12,24 @@ Every ATAK/WinTAK package comes with these map sources (in `maps/`):
 | OpenTopoMap | Contour lines, trails, hiking | World |
 | USGS Topo | Classic US topo quads: contours, trails, land features | US only |
 | USGS Imagery + Topo | Satellite with topo overlay | US only |
+| US Land Ownership (BLM) | Flat map of who owns the land (BLM, Forest Service, state, private) | US only |
+| **Public Land + Topo** / **Public Land + Satellite** | Topo or satellite with public land shaded, so private land stands out. Needs `setup/enable-publicland.sh` | US only |
 
 In ATAK: **☰ → Maps & Favorites** (on some versions just **Maps**), then pick
 one. For iTAK, the built-in maps are good, and the `-maps.zip` package can be
 imported too if your iTAK version supports custom map sources.
+
+**Public-land colors:** yellow = BLM, green = Forest Service, blue = state land,
+purple = National Park Service, pink = military, and uncolored = private or
+unknown. Fish & Wildlife, tribal and other agencies have their own shades.
+(Data: BLM's Surface Management Agency map.)
+Ownership data is detailed to about 10 m. **It's a guide, not a legal survey:**
+check your state's hunting regulations and posted boundaries.
+
+The Public Land maps are made by your server (it blends BLM's ownership data
+onto USGS maps and caches the result), so they need HTTPS set up
+(`setup/enable-https.sh`) for ATAK to load them. Re-run
+`./setup/enable-publicland.sh` after upgrading OpenTAKServer.
 
 **Add your own:** drop another ATAK map source `.xml` into `maps/`, run
 `takcx rebuild --all` and have people re-import (or send them `takcx maps`, a

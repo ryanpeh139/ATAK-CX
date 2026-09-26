@@ -327,17 +327,39 @@ def map_files():
     return sorted(glob.glob(os.path.join(MAPS_DIR, "*.xml")))
 
 
+def map_source_xml(name, url, max_zoom, tile_type="jpg"):
+    return (f'<?xml version="1.0" encoding="UTF-8"?>\n<customMapSource>\n'
+            f"    <name>{xml_escape(name)}</name>\n    <minZoom>0</minZoom>\n"
+            f"    <maxZoom>{max_zoom}</maxZoom>\n    <tileType>{tile_type}</tileType>\n"
+            f"    <url>{xml_escape(url)}</url>\n    <tileUpdate>None</tileUpdate>\n"
+            f"    <backgroundColor>#000000</backgroundColor>\n    <ignoreErrors>false</ignoreErrors>\n"
+            f"    <serverParts></serverParts>\n</customMapSource>\n")
+
+
+def all_map_sources(team):
+    """(file name, xml text) for every map in maps/ plus server-generated ones."""
+    sources = [(os.path.basename(f), open(f).read()) for f in map_files()]
+    if team.get("PUBLICLAND_ENABLED", "no").lower() == "yes":
+        base = f"https://{team['SERVER_ADDRESS']}/tiles"
+        sources += [
+            ("publicland-topo.xml", map_source_xml(
+                "Public Land + Topo (US)", base + "/publicland-topo/{$z}/{$x}/{$y}.jpg", 16)),
+            ("publicland-imagery.xml", map_source_xml(
+                "Public Land + Satellite (US)", base + "/publicland-imagery/{$z}/{$x}/{$y}.jpg", 16)),
+        ]
+    return sources
+
+
 def build_maps_zip(team, path):
-    files = map_files()
-    folder = "maps"
-    entries = [f"{folder}/{os.path.basename(f)}" for f in files]
+    sources = all_map_sources(team)
+    entries = [f"maps/{name}" for name, _ in sources]
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
-        for f, e in zip(files, entries):
-            z.write(f, e)
+        for (_, xml), entry in zip(sources, entries):
+            z.writestr(entry, xml)
         z.writestr("MANIFEST/manifest.xml",
                    manifest(stable_uid(team["SERVER_ADDRESS"], "maps"),
                             f"{team['TEAM_NAME']} maps", entries))
-    return len(files)
+    return len(sources)
 
 
 def atak_prefs(team, ots_conf, username, profile):
@@ -431,7 +453,7 @@ def build_packages(team, ots_conf, username, profile):
                             delete_after_import=True))
     outer_entries = ["packages/connection.zip"]
     maps_tmp = None
-    if team.get("INCLUDE_MAPS", "yes").lower() == "yes" and map_files():
+    if team.get("INCLUDE_MAPS", "yes").lower() == "yes" and all_map_sources(team):
         maps_tmp = os.path.join(out, "maps.zip.tmp")
         build_maps_zip(team, maps_tmp)
         outer_entries.append("packages/maps.zip")
@@ -1227,9 +1249,10 @@ def cmd_doctor(args):
     radio = radio_enabled()
     video = team_flag("VIDEO_ENABLED")
     alerts = team_flag("ALERTS_ENABLED")
+    publicland = team_flag("PUBLICLAND_ENABLED")
     print("Services")
     for svc in (SERVICES + (["mumble-server"] if radio else []) + (["mediamtx"] if video else [])
-                + (["takcx-alerts"] if alerts else [])):
+                + (["takcx-alerts"] if alerts else []) + (["takcx-tiles"] if publicland else [])):
         state = subprocess.run(["systemctl", "is-active", svc], capture_output=True,
                                text=True).stdout.strip() if shutil.which("systemctl") else "unknown"
         report(state == "active", f"{svc}: {state or 'not running'}", f"sudo systemctl restart {svc}; "

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<customMapSource>
+    <name>US Land Ownership (BLM)</name>
+    <minZoom>0</minZoom>
+    <maxZoom>14</maxZoom>
+    <tileType>jpg</tileType>
+    <url>https://gis.blm.gov/arcgis/rest/services/lands/BLM_Natl_SMA_Cached_with_PriUnk/MapServer/tile/{$z}/{$y}/{$x}</url>
+    <tileUpdate>None</tileUpdate>
+    <backgroundColor>#FFFFFF</backgroundColor>
+    <ignoreErrors>false</ignoreErrors>
+    <serverParts></serverParts>
+</customMapSource>

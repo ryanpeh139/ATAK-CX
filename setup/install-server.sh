@@ -236,6 +236,20 @@ else
   fi
 fi
 
+# --------------------------------------------------------------------------- public land maps
+step "Public-land maps (US)"
+if [[ ${PUBLICLAND_ENABLED:-no} == yes ]]; then
+  echo "Already on."
+else
+  echo "Adds two maps to everyone's ATAK: topo and satellite with public land shaded"
+  echo "(BLM, Forest Service, state, parks...) so you can see where private land starts."
+  if yes_no "Turn on public-land maps?" Y; then
+    "$REPO_DIR/setup/enable-publicland.sh" || note "Public-land setup failed; see above. You can re-run setup/enable-publicland.sh"
+    # shellcheck disable=SC1090
+    . "$TEAM_CONF"
+  fi
+fi
+
 # --------------------------------------------------------------------------- aircraft
 step "Aircraft on the map (ADS-B)"
 if [[ ${AIRCRAFT_ENABLED:-no} == yes ]]; then
@@ -282,6 +296,7 @@ Admin login:      see $TAKCX_HOME/admin.conf
 Team radio:       $( [[ ${RADIO_ENABLED:-no} == yes ]] && echo "$SERVER_ADDRESS port 64738 (Mumla / Mumble apps)" || echo "off (turn on: setup/enable-radio.sh)" )
 Live video:       $( [[ ${VIDEO_ENABLED:-no} == yes ]] && echo "on (drones: takcx add-drone drone1 --share)" || echo "off (turn on: setup/enable-video.sh)" )
 Emergency alerts: $( [[ ${ALERTS_ENABLED:-no} == yes ]] && echo "on (ntfy topic: ${NTFY_TOPIC:-?})" || echo "off (turn on: setup/enable-alerts.sh)" )
+Public-land maps: $( [[ ${PUBLICLAND_ENABLED:-no} == yes ]] && echo "on" || echo "off (turn on: setup/enable-publicland.sh)" )
 Aircraft:         $( [[ ${AIRCRAFT_ENABLED:-no} == yes ]] && echo "on, near ${AIRCRAFT_NEAR:-?}" || echo "off (turn on: takcx aircraft on --near \"Town\")" )
 
 Add your first buddy (and yourself!):

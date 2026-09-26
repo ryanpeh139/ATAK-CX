@@ -206,6 +206,7 @@ for a few minutes; that's normal. Here's every question it asks and what to answ
 | Set up the team radio? | **Y** |
 | Turn on live video? | **Y** |
 | Turn on emergency alerts? → Discord / Telegram | **Y**, then press Enter to skip Discord/Telegram (or paste them) |
+| Turn on public-land maps? | **Y** (US only) |
 | Turn on aircraft tracking? → which town? | **Y**, then e.g. `Denver, CO` or `39.74,-104.99` |
 | Get a free certificate for … ? | **Y** (needs ports 80/443 forwarded; you can re-run later with `./setup/enable-https.sh`) |
 | Email for Let's Encrypt | Optional, just press Enter |
