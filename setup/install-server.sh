@@ -320,10 +320,12 @@ fi
 
 # --------------------------------------------------------------------------- backups
 step "Nightly backups"
+command -v crontab >/dev/null || sudo apt-get install -y -qq cron >/dev/null
 if crontab -l 2>/dev/null | grep -q "setup/backup.sh"; then
   echo "Already scheduled."
 elif yes_no "Back up the server's certificates and database every night (kept 14 days)?" Y; then
-  (crontab -l 2>/dev/null; echo "17 3 * * * $REPO_DIR/setup/backup.sh >> $TAKCX_HOME/backup.log 2>&1") | crontab -
+  # "crontab -l" fails when there's no crontab yet (a fresh system), so don't let that stop us.
+  { crontab -l 2>/dev/null || true; echo "17 3 * * * $REPO_DIR/setup/backup.sh >> $TAKCX_HOME/backup.log 2>&1"; } | crontab -
   echo "Scheduled for 03:17 daily into ~/takcx-backups. Copy them off the server now and then."
 fi
 

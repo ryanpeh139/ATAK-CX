@@ -33,6 +33,8 @@ if [[ $(cat "$dir/last.log") != OK ]]; then
   exit 1
 fi
 
-(crontab -l 2>/dev/null | grep -v "$dir/update.sh"; echo "*/5 * * * * $dir/update.sh >/dev/null 2>&1") | crontab -
+command -v crontab >/dev/null || sudo apt-get install -y -qq cron >/dev/null
+# "crontab -l" fails when there's no crontab yet (a fresh system), so don't let that stop us.
+{ crontab -l 2>/dev/null | grep -v "$dir/update.sh" || true; echo "*/5 * * * * $dir/update.sh >/dev/null 2>&1"; } | crontab -
 echo "$name.duckdns.org now points here, and is refreshed every 5 minutes."
 echo "Use $name.duckdns.org as the server address in install-server.sh."
