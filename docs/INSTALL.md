@@ -196,6 +196,7 @@ for a few minutes; that's normal. Here's every question it asks and what to answ
 | Build elevation data for your area? → which town? | **Y**, and press Enter to reuse the aircraft town (takes a minute or two) |
 | Get a free certificate for … ? | **Y** (needs ports 80/443 forwarded; you can re-run later with `./setup/enable-https.sh`) |
 | Email for Let's Encrypt | Optional, just press Enter |
+| Turn on the web manager? | **Y** |
 | Back up every night? | **Y** |
 
 At the end it prints your web map address and where the admin login is saved
@@ -222,10 +223,11 @@ recheck port forwarding (4C) and DuckDNS (4B).
 
 ## 8. Add yourself and your buddies
 
-Start with yourself, to test the whole flow:
+Start with yourself, to test the whole flow. `--admin` also lets you log into the
+web Manager:
 
 ```
-takcx add ryan --role "Team Lead" --share
+takcx add ryan --role "Team Lead" --admin --share
 ```
 
 It prints a private link and a QR code. Open the link on your phone and follow
@@ -248,6 +250,13 @@ More: [Add buddies](2-add-buddies.md), including colors, roles and lost phones.
 ---
 
 ## 9. Extras
+
+### The web Manager
+Open `https://mycrew.duckdns.org/manage/` and log in as **ryan** (your own admin
+account, not `administrator`). From there you can add people and drones, change
+settings, build elevation data, upload plugins and download backups, all without
+SSH. Turn on two-factor login for your account first:
+[Manager guide](8-manager.md).
 
 ### Team radio (push-to-talk)
 Already set up if you said yes. Buddies' pages explain it: install **Mumla**

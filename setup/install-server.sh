@@ -304,6 +304,20 @@ if ! is_ip "$SERVER_ADDRESS" && [[ ${HTTPS_ENABLED:-no} != yes ]]; then
   fi
 fi
 
+# --------------------------------------------------------------------------- manager
+step "Web manager"
+if [[ ${MANAGER_ENABLED:-no} == yes ]]; then
+  echo "Already on: https://$SERVER_ADDRESS/manage/"
+else
+  echo "A web dashboard at https://$SERVER_ADDRESS/manage/ to add people and drones, change"
+  echo "settings, add-ons and plugins, and download backups, without SSH."
+  if yes_no "Turn on the web manager?" Y; then
+    "$REPO_DIR/setup/enable-manager.sh" || note "Manager setup failed; see above. You can re-run setup/enable-manager.sh"
+    # shellcheck disable=SC1090
+    . "$TEAM_CONF"
+  fi
+fi
+
 # --------------------------------------------------------------------------- backups
 step "Nightly backups"
 if crontab -l 2>/dev/null | grep -q "setup/backup.sh"; then
@@ -319,6 +333,7 @@ fi
 step "All set!"
 cat <<EOF
 Web map & admin:  https://$SERVER_ADDRESS/
+Manager:          $( [[ ${MANAGER_ENABLED:-no} == yes ]] && echo "https://$SERVER_ADDRESS/manage/ (log in with your own admin, see below)" || echo "off (turn on: setup/enable-manager.sh)" )
 Admin login:      see $TAKCX_HOME/admin.conf
 Team radio:       $( [[ ${RADIO_ENABLED:-no} == yes ]] && echo "$SERVER_ADDRESS port 64738 (Mumla / Mumble apps)" || echo "off (turn on: setup/enable-radio.sh)" )
 Live video:       $( [[ ${VIDEO_ENABLED:-no} == yes ]] && echo "on (drones: takcx add-drone drone1 --share)" || echo "off (turn on: setup/enable-video.sh)" )
@@ -327,8 +342,8 @@ Public-land maps: $( [[ ${PUBLICLAND_ENABLED:-no} == yes ]] && echo "on" || echo
 Elevation data:   $( [[ -n ${ELEVATION_URL:-} ]] && echo "${ELEVATION_AREA:-built} (${ELEVATION_SIZE:-})" || echo "none (build: takcx elevation --near \"Town\")" )
 Aircraft:         $( [[ ${AIRCRAFT_ENABLED:-no} == yes ]] && echo "on, near ${AIRCRAFT_NEAR:-?}" || echo "off (turn on: takcx aircraft on --near \"Town\")" )
 
-Add your first buddy (and yourself!):
-  ${bold}takcx add yourname --role "Team Lead" --share${reset}
+Add yourself first (as an admin, so you can use the Manager):
+  ${bold}takcx add yourname --role "Team Lead" --admin --share${reset}
   ${bold}takcx add bob --share${reset}
 
 Then send each person their link. More: takcx --help, and docs/2-add-buddies.md

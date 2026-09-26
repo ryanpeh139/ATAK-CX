@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block head %}{% if running_jobs %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block title %}Jobs{% endblock %}
+{% block body %}
+<h1>Recent jobs</h1>
+<div class="card scroll">
+{% if jobs %}
+<table><tr><th>Started</th><th>Job</th><th>By</th><th>Status</th></tr>
+{% for j in jobs %}
+<tr><td>{{ j.started }}</td><td><a href="{{ url_for('m.job', job_id=j.id) }}">{{ j.title }}</a></td><td>{{ j.user }}</td>
+<td><span class="pill {{ 'ok' if j.status == 'done' else 'bad' if j.status == 'failed' else 'warn' }}">{{ j.status }}</span></td></tr>
+{% endfor %}</table>
+{% else %}<p class="muted">Nothing yet. Actions you take here show up with their output.</p>{% endif %}
+</div>
+{% endblock %}

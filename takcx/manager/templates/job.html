@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block head %}{% if job.status == 'running' %}<meta http-equiv="refresh" content="2">{% endif %}{% endblock %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block body %}
+<h1>{{ job.title }}</h1>
+<p>
+  {% if job.status == 'running' %}<span class="pill warn">Running…</span> <span class="muted">This page refreshes by itself.</span>
+  {% elif job.status == 'done' %}<span class="pill ok">Done</span>
+  {% else %}<span class="pill bad">Failed</span>{% endif %}
+  <span class="muted">started {{ job.started }} by {{ job.user }}</span>
+</p>
+{% for url, svg in links %}
+<div class="card">
+  <h2>{% if url.startswith('rtmp') %}Stream address for DJI Fly{% elif '/files/' in url %}Download link{% else %}Private link (treat it like a password){% endif %}</h2>
+  <p><input type="text" readonly value="{{ url }}"></p>
+  {% if svg %}<div class="qr">{{ svg | safe_svg | safe }}</div>{% endif %}
+</div>
+{% endfor %}
+<pre>{{ job.output or '…' }}</pre>
+<p><a class="btn alt" href="{{ job.back }}">Back</a></p>
+{% endblock %}

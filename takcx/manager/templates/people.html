@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}People{% endblock %}
+{% block body %}
+<h1>People</h1>
+<div class="card">
+  <h2>Add someone</h2>
+  <form method="post" action="{{ url_for('m.people_add') }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="row">
+      <div class="field"><label>Username (lowercase letters, numbers, _ or .)</label><input type="text" name="name" pattern="[a-z0-9][a-z0-9_.]{0,31}" required></div>
+      <div class="field"><label>Callsign on the map (optional)</label><input type="text" name="callsign" maxlength="40"></div>
+      <div class="field"><label>Team color</label><select name="color"><option value="">Default ({{ team.get('DEFAULT_TEAM_COLOR', 'Cyan') }})</option>{% for c in colors %}<option>{{ c }}</option>{% endfor %}</select></div>
+      <div class="field"><label>Role</label><select name="role"><option value="">Default ({{ team.get('DEFAULT_ROLE', 'Team Member') }})</option>{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="check"><input type="checkbox" name="share" checked> Make a private link for them</label>
+      <label class="check"><input type="checkbox" name="admin"> Also a server admin</label>
+      <button>Add</button>
+    </div>
+  </form>
+</div>
+<div class="card scroll">
+  <h2>Everyone</h2>
+  <table>
+    <tr><th>User</th><th>Callsign</th><th>Color / role</th><th>Status</th><th>Link</th><th>Actions</th></tr>
+    {% for r in rows %}
+    <tr>
+      <td><b>{{ r.username }}</b>{% if r.admin %} <span class="pill warn">admin</span>{% endif %}
+          {% if r.last %}<br><span class="muted" style="font-size:.8em">last login {{ r.last }}</span>{% endif %}</td>
+      <td>{{ r.profile.get('callsign', '-') }}</td>
+      <td>{{ r.profile.get('color', '-') }}<br><span class="muted">{{ r.profile.get('role', '') }}</span></td>
+      <td><span class="pill {{ 'ok' if r.active else 'bad' }}">{{ 'enabled' if r.active else 'disabled' }}</span></td>
+      <td>{% if r.link %}<a href="{{ r.link }}">open</a>{% else %}<span class="muted">-</span>{% endif %}</td>
+      <td>
+        {% if r.managed %}
+        <div class="actions">
+          {% for action, label in ([('unshare', 'Take link down')] if r.link else [('share', 'Make link')]) + [('disable', 'Disable') if r.active else ('enable', 'Enable'), ('rebuild', 'Rebuild')] %}
+          <form class="inline" method="post" action="{{ url_for('m.person_action', name=r.username, action=action) }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><button class="small {{ 'danger' if action == 'disable' else 'alt' }}">{{ label }}</button></form>
+          {% endfor %}
+        </div>
+        <details style="margin-top:4px"><summary>Remove…</summary>
+          <form method="post" action="{{ url_for('m.person_action', name=r.username, action='remove') }}" class="row" style="margin-top:6px">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <div class="field"><label>Type <b>{{ r.username }}</b> to confirm</label><input type="text" name="confirm" autocomplete="off"></div>
+            <button class="small danger">Remove for good</button></form>
+        </details>
+        {% else %}<span class="muted" style="font-size:.85em">not made with takcx</span>{% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">No one yet. Add yourself first.</td></tr>
+    {% endfor %}
+  </table>
+  <p class="muted" style="font-size:.85em">Disable locks someone out of the map, radio, video and web right away (lost phone?). Enable restores their old password. Take links down once people have joined.</p>
+</div>
+{% endblock %}

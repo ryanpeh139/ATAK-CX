@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Backups{% endblock %}
+{% block body %}
+<h1>Backups</h1>
+<div class="card">
+  <p class="muted">Backups hold your certificate authority, database and everyone's packages: the keys to the whole setup. Download them now and then and keep them somewhere private.</p>
+  <form method="post" action="{{ url_for('m.backups_run') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button>Back up now</button></form>
+</div>
+<div class="card scroll">
+  <table>
+    <tr><th>When</th><th>Size</th><th></th></tr>
+    {% for b in files %}
+    <tr><td>{{ b.when }}</td><td>{{ b.size | mb }}</td><td><a href="{{ url_for('m.backups_download', name=b.name) }}">Download</a></td></tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">No backups yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

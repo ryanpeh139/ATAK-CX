@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Status{% endblock %}
+{% block body %}
+<h1>Status</h1>
+<div class="grid">
+  <div class="card">
+    <h2>Server</h2>
+    <table>
+      <tr><td>OpenTAKServer API</td><td><span class="pill {{ 'ok' if ots_ok else 'bad' }}">{{ 'healthy' if ots_ok else 'not responding' }}</span></td></tr>
+      {% for label, name, state in rows %}
+      <tr><td>{{ label }} <span class="muted">({{ name }})</span></td>
+          <td><span class="pill {{ 'ok' if state == 'active' else 'bad' }}">{{ state }}</span></td></tr>
+      {% endfor %}
+      {% if radio_link is not none %}
+      <tr><td>Radio logins linked</td><td><span class="pill {{ 'ok' if radio_link else 'bad' }}">{{ 'yes' if radio_link else 'no' }}</span></td></tr>
+      {% endif %}
+    </table>
+    <form method="post" action="{{ url_for('m.doctor') }}" style="margin-top:12px">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">Run full health check</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>Team</h2>
+    <table>
+      <tr><td>Server address</td><td>{{ team.get('SERVER_ADDRESS', '?') }}</td></tr>
+      <tr><td>Web map</td><td><a href="https://{{ team.get('SERVER_ADDRESS', '') }}/">open</a></td></tr>
+      <tr><td>Disk free</td><td>{{ disk.free | mb }} of {{ disk.total | mb }}
+        {% if disk.free < 3 * 1024 ** 3 %}<span class="pill warn">low</span>{% endif %}</td></tr>
+      <tr><td>Last backup</td><td>{% if last_backup %}{{ last_backup }}{% else %}<span class="pill warn">none yet</span>{% endif %}</td></tr>
+    </table>
+    <h2 style="margin-top:16px">Add-ons</h2>
+    <div class="actions">
+      {% for name, on in addons %}<span class="pill {{ 'ok' if on else 'warn' }}">{{ name }}: {{ 'on' if on else 'off' }}</span>{% endfor %}
+    </div>
+    <p style="margin-top:12px"><a href="{{ url_for('m.addons') }}">Manage add-ons →</a></p>
+  </div>
+</div>
+{% endblock %}

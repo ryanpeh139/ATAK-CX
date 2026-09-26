@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Add-ons{% endblock %}
+{% macro state(on) %}<span class="pill {{ 'ok' if on else 'warn' }}">{{ 'on' if on else 'off' }}</span>{% endmacro %}
+{% macro ssh(cmd) %}<p class="muted" style="font-size:.9em">To turn it on, run this on the server over SSH (it needs admin rights this page doesn't have):</p><p><input type="text" readonly value="cd ~/ATAK-CX && {{ cmd }}"></p>{% endmacro %}
+{% block body %}
+<h1>Add-ons</h1>
+<div class="grid">
+
+  <div class="card">
+    <h2>Aircraft on the map {{ state(team.get('AIRCRAFT_ENABLED') == 'yes') }}</h2>
+    {% if team.get('AIRCRAFT_ENABLED') == 'yes' %}<p class="muted">Tracking within {{ team.get('AIRCRAFT_RADIUS_NM', '50') }} nm of {{ team.get('AIRCRAFT_NEAR', '?') }}.</p>{% endif %}
+    <form method="post" action="{{ url_for('m.addons_aircraft') }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="row">
+        <div class="field"><label>Center on (town or lat,lon)</label><input type="text" name="near" value="{{ team.get('AIRCRAFT_NEAR', '') }}" placeholder="Bemidji, MN"></div>
+        <div class="field" style="max-width:120px"><label>Radius (nm, max 250)</label><input type="number" name="radius" min="1" max="250" value="{{ team.get('AIRCRAFT_RADIUS_NM', '50') }}"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button name="action" value="on">{{ 'Update area' if team.get('AIRCRAFT_ENABLED') == 'yes' else 'Turn on' }}</button>
+        {% if team.get('AIRCRAFT_ENABLED') == 'yes' %}<button class="alt" name="action" value="off">Turn off</button>{% endif %}
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Elevation data {{ state(team.get('ELEVATION_URL')) }}</h2>
+    {% if team.get('ELEVATION_URL') %}<p class="muted">{{ team.get('ELEVATION_AREA') }} ({{ team.get('ELEVATION_SIZE') }}). <a href="{{ team.get('ELEVATION_URL') }}">download</a></p>{% endif %}
+    {% if not gdal %}{{ ssh('sudo apt install -y gdal-bin') }}{% endif %}
+    <form method="post" action="{{ url_for('m.addons_elevation') }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="row">
+        <div class="field"><label>Center on</label><input type="text" name="near" value="{{ team.get('AIRCRAFT_NEAR', '') }}" required></div>
+        <div class="field" style="max-width:110px"><label>Radius (km)</label><input type="number" name="radius" min="5" max="300" value="50"></div>
+        <div class="field" style="max-width:150px"><label>Detail</label><select name="level"><option value="2">30 m (best)</option><option value="1">90 m (smaller)</option></select></div>
+      </div>
+      <p><button {{ 'disabled' if not gdal }}>Build</button> <span class="muted" style="font-size:.85em">Everyone's welcome page gets the new link.</span></p>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Emergency alerts {{ state(team.get('ALERTS_ENABLED') == 'yes') }}</h2>
+    {% if team.get('ALERTS_ENABLED') == 'yes' %}
+      <p>ntfy topic: <b>{{ team.get('NTFY_TOPIC') }}</b></p>
+      {% if ntfy_qr %}<div class="qr">{{ ntfy_qr | safe_svg | safe }}</div>{% endif %}
+      <p class="muted" style="font-size:.9em">Scan with a phone that has the ntfy app. Discord and Telegram are under Settings.</p>
+      <form method="post" action="{{ url_for('m.addons_alert_test') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">Send a test alert</button></form>
+    {% else %}{{ ssh('./setup/enable-alerts.sh') }}{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Team radio {{ state(team.get('RADIO_ENABLED') == 'yes') }}</h2>
+    {% if team.get('RADIO_ENABLED') == 'yes' %}
+      <p>Server <b>{{ team.get('SERVER_ADDRESS') }}</b>, port <b>64738</b>. Channels: {{ team.get('RADIO_CHANNELS', '').replace(',', ', ') }}</p>
+      <p class="muted" style="font-size:.9em">Change channels under Settings.</p>
+    {% else %}{{ ssh('./setup/enable-radio.sh') }}{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Live video {{ state(team.get('VIDEO_ENABLED') == 'yes') }}</h2>
+    {% if team.get('VIDEO_ENABLED') == 'yes' %}
+      <p>Drones: <a href="{{ url_for('m.drones') }}">Drones page</a>. Watch on the <a href="https://{{ team.get('SERVER_ADDRESS') }}/">web map</a> under Video Streams.</p>
+    {% else %}{{ ssh('./setup/enable-video.sh') }}{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Public-land maps {{ state(team.get('PUBLICLAND_ENABLED') == 'yes') }}</h2>
+    {% if team.get('PUBLICLAND_ENABLED') == 'yes' %}
+      <p class="muted">"Public Land + Topo" and "Public Land + Satellite" are in everyone's package.</p>
+    {% else %}{{ ssh('./setup/enable-publicland.sh') }}{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>HTTPS certificate {{ state(team.get('HTTPS_ENABLED') == 'yes') }}</h2>
+    {% if team.get('HTTPS_ENABLED') != 'yes' %}{{ ssh('./setup/enable-https.sh') }}{% else %}<p class="muted">Renews automatically.</p>{% endif %}
+  </div>
+
+</div>
+{% endblock %}

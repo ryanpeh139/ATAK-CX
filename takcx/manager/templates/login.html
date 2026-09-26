@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+{% block body %}
+<div class="card" style="max-width:380px;margin:40px auto">
+  <h1>{{ team.get('TEAM_NAME', 'ATAK-CX') }} Manager</h1>
+  {% if two_factor %}
+  <p class="muted">Enter the 6-digit code from your authenticator app.</p>
+  <form method="post" action="{{ url_for('m.two_factor') }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="code">Code</label>
+    <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required>
+    <p><button>Continue</button></p>
+  </form>
+  {% else %}
+  <p class="muted">Log in with an OpenTAKServer administrator account.</p>
+  <form method="post" action="{{ url_for('m.login') }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="u">Username</label>
+    <input type="text" id="u" name="username" autocomplete="username" autofocus required>
+    <label for="p" style="margin-top:10px">Password</label>
+    <input type="password" id="p" name="password" autocomplete="current-password" required>
+    <p><button>Log in</button></p>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

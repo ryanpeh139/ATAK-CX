@@ -281,6 +281,17 @@ def connect(team=None):
     return ots
 
 
+def delete_cert_packages(ots, username):
+    """Remove the connection-package records OpenTAKServer keeps for a user's certificate.
+    Deleting them also deletes the certificate record and files, so the same username
+    can be added again later (otherwise OTS says "Certificate already exists")."""
+    for filename in (f"{username}_CONFIG.zip", f"{username}_CONFIG_iTAK.zip"):  # OTS matches exactly
+        data = ots.call("GET", f"/api/data_packages?filename={urllib.parse.quote(filename)}")
+        for pkg in data.get("results", []):
+            if pkg.get("filename") == filename and pkg.get("hash"):
+                ots.call("DELETE", f"/api/data_packages?hash={urllib.parse.quote(pkg['hash'])}")
+
+
 def join_aircraft_groups(ots, username):
     """Aircraft are sent to OpenTAKServer's "ADS-B" group. Joining any group stops a
     user getting the default (__ANON__) team traffic, so join both."""
@@ -759,7 +770,7 @@ def pick(value, options, what):
 
 
 def print_qr(text):
-    if shutil.which("qrencode"):
+    if shutil.which("qrencode") and not os.environ.get("TAKCX_NO_QR"):
         subprocess.call(["qrencode", "-t", "ANSIUTF8", "-m", "2", text])
 
 
@@ -803,6 +814,7 @@ def cmd_add(args):
     ots.call("POST", "/api/user/add", {"username": username, "password": password,
                                         "confirm_password": password, "roles": roles})
     print("Issuing certificate...")
+    delete_cert_packages(ots, username)  # leftovers from a previous account with this name
     ots.call("POST", "/api/certificate", {"username": username})
     if team_flag("AIRCRAFT_ENABLED"):
         join_aircraft_groups(ots, username)
@@ -946,6 +958,7 @@ def cmd_remove(args):
     ots = connect()
     if ots.find_user(username):
         ots.call("POST", "/api/user/delete", {"username": username})
+    delete_cert_packages(ots, username)
     unshare(username, quiet=True)
     shutil.rmtree(os.path.join(BUDDIES_DIR, username), ignore_errors=True)
     kick_connections(args)

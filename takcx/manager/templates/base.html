@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+{% block head %}{% endblock %}
+<title>{% block title %}Manager{% endblock %} · {{ team.get('TEAM_NAME', 'ATAK-CX') }}</title>
+<style>
+  :root { --bg:#f4f5f1; --card:#fff; --ink:#1c221e; --muted:#5d685f; --accent:#2f6b3f; --line:#dde2da;
+          --bad:#a3321f; --badbg:#fbe9e5; --okbg:#e6f2e8; --warn:#8a6100; --warnbg:#fdf3dc; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#131714; --card:#1c221e; --ink:#e6ebe5; --muted:#98a49a; --accent:#7fc58f; --line:#2d362f;
+            --bad:#ff8b78; --badbg:#3a1f1a; --okbg:#1d3323; --warn:#f0c060; --warnbg:#3a3018; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { background:var(--card); border-bottom:1px solid var(--line); }
+  .bar { max-width:980px; margin:0 auto; padding:10px 16px; display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; }
+  .brand { font-weight:700; margin-right:8px; }
+  nav a { color:var(--muted); text-decoration:none; padding:4px 2px; }
+  nav a.on { color:var(--accent); font-weight:600; border-bottom:2px solid var(--accent); }
+  .who { margin-left:auto; color:var(--muted); font-size:.9em; display:flex; gap:8px; align-items:center; }
+  main { max-width:980px; margin:0 auto; padding:20px 16px 48px; }
+  h1 { font-size:1.4rem; margin:0 0 14px; }
+  h2 { font-size:1.08rem; margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin:0 0 16px; }
+  .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+  .muted { color:var(--muted); }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:7px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:.85em; }
+  .scroll { overflow-x:auto; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:.82em; font-weight:600; }
+  .ok { background:var(--okbg); color:var(--accent); }
+  .bad { background:var(--badbg); color:var(--bad); }
+  .warn { background:var(--warnbg); color:var(--warn); }
+  .flash { padding:10px 12px; border-radius:8px; margin:0 0 12px; }
+  button, .btn { font:inherit; font-weight:600; border:0; border-radius:7px; padding:8px 14px; cursor:pointer;
+                 background:var(--accent); color:var(--bg); text-decoration:none; display:inline-block; }
+  button.alt, .btn.alt { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  button.danger { background:transparent; color:var(--bad); border:1px solid var(--bad); }
+  button.small { padding:3px 9px; font-size:.85em; }
+  form.inline { display:inline; }
+  .row { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:end; }
+  label { display:block; font-size:.85em; color:var(--muted); margin-bottom:3px; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--ink); width:100%; }
+  .field { min-width:140px; flex:1; }
+  .check { display:flex; gap:6px; align-items:center; color:var(--ink); font-size:.95em; }
+  code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.88em; }
+  code { background:var(--line); padding:1px 5px; border-radius:4px; }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:12px; white-space:pre-wrap; word-break:break-word; max-height:60vh; overflow:auto; }
+  .qr svg { width:180px; height:180px; background:#fff; border-radius:6px; }
+  .actions { display:flex; flex-wrap:wrap; gap:4px; }
+  details summary { cursor:pointer; color:var(--muted); }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+{% if user %}
+<header><div class="bar">
+  <span class="brand">{{ team.get('TEAM_NAME', 'ATAK-CX') }} Manager</span>
+  <nav>
+    {% set here = request.endpoint %}
+    <a href="{{ url_for('m.status') }}" class="{{ 'on' if here == 'm.status' }}">Status</a>
+    <a href="{{ url_for('m.people') }}" class="{{ 'on' if here == 'm.people' }}">People</a>
+    <a href="{{ url_for('m.drones') }}" class="{{ 'on' if here == 'm.drones' }}">Drones</a>
+    <a href="{{ url_for('m.addons') }}" class="{{ 'on' if here == 'm.addons' }}">Add-ons</a>
+    <a href="{{ url_for('m.plugins') }}" class="{{ 'on' if here == 'm.plugins' }}">Plugins</a>
+    <a href="{{ url_for('m.settings') }}" class="{{ 'on' if here == 'm.settings' }}">Settings</a>
+    <a href="{{ url_for('m.backups') }}" class="{{ 'on' if here == 'm.backups' }}">Backups</a>
+    <a href="{{ url_for('m.jobs') }}" class="{{ 'on' if here in ('m.jobs', 'm.job') }}">Jobs{% if running_jobs %} ({{ running_jobs }}){% endif %}</a>
+  </nav>
+  <div class="who">{{ user }}
+    <form class="inline" method="post" action="{{ url_for('m.logout') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt small">Log out</button></form>
+  </div>
+</div></header>
+{% endif %}
+<main>
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}
+    <div class="flash {{ cat }}">{{ msg }}</div>
+  {% endfor %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

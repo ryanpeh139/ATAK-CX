@@ -43,7 +43,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable takcx-tiles >/dev/null 2>&1
 sudo systemctl restart takcx-tiles
 
-sudo python3 "$REPO_DIR/setup/nginx_add_tiles.py" "$SITE"
+sudo python3 "$REPO_DIR/setup/nginx_add_location.py" "$SITE" /tiles/ 8095
 sudo nginx -t
 sudo systemctl reload nginx
 

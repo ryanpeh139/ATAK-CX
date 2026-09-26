@@ -13,6 +13,7 @@ certificates, ports or server settings on anyone's phone.
   - satellite and topo maps, **US public-land maps**, and detailed **elevation
     data** for your area, all usable offline
   - plugins pushed to everyone automatically, plus a web map in your browser
+  - a **web Manager** at `/manage/` to add people, drones, plugins and change settings without SSH
 - **Built on:** [OpenTAKServer](https://github.com/brian7704/OpenTAKServer),
   a free, open-source TAK server. The apps are the standard free TAK apps;
   what ATAK-CX customizes is the setup: your team name, callsigns, team colors,
@@ -81,7 +82,8 @@ It opens a page with the right download and steps for their device.
 | `takcx elevation --near "Town"` | Detailed terrain data for ATAK's line-of-sight and slope tools |
 | `takcx doctor` | Check that everything is running and reachable |
 
-The web map and admin panel are at `https://your-server/` (login in `~/takcx/admin.conf`).
+The web map and admin panel are at `https://your-server/`, and the **ATAK-CX Manager** at
+`https://your-server/manage/` does everything in this table from a browser ([guide](docs/8-manager.md)).
 
 ## Guides
 
@@ -93,8 +95,9 @@ The web map and admin panel are at `https://your-server/` (login in `~/takcx/adm
 5. [Plugins and extras](docs/5-plugins.md): push plugins to everyone, aircraft on the map, live video
 6. [Meshtastic gear](docs/6-meshtastic-gear.md): which off-grid radios to buy and how to set them up
 7. [Emergency alerts](docs/7-alerts.md): ATAK emergencies pushed to phones, Discord, Telegram
-8. [Troubleshooting](docs/troubleshooting.md)
-9. [Backups, restore and upgrades](docs/maintenance.md)
+8. [Web Manager](docs/8-manager.md): run everything from a browser at /manage/
+9. [Troubleshooting](docs/troubleshooting.md)
+10. [Backups, restore and upgrades](docs/maintenance.md)
 
 ## What's in this repo
 
@@ -106,6 +109,8 @@ setup/enable-video.sh     live video for drones and cameras (run by the installe
 setup/duckdns.sh          keep a free DuckDNS name pointed at a home server
 setup/enable-alerts.sh    emergency alerts to phones (ntfy / Discord / Telegram)
 setup/enable-publicland.sh  US public-land maps (land ownership over topo/satellite)
+setup/enable-manager.sh   the web Manager at /manage/
+takcx/manager/            the web Manager app
 takcx/tile_server.py      the public-land map tile blender
 takcx/alert_bridge.py     the alerts service
 setup/backup.sh           nightly backup of certificates, database and packages
