@@ -205,6 +205,7 @@ for a few minutes; that's normal. Here's every question it asks and what to answ
 | Turn on the firewall? | **Y** |
 | Set up the team radio? | **Y** |
 | Turn on live video? | **Y** |
+| Turn on emergency alerts? → Discord / Telegram | **Y**, then press Enter to skip Discord/Telegram (or paste them) |
 | Turn on aircraft tracking? → which town? | **Y**, then e.g. `Denver, CO` or `39.74,-104.99` |
 | Get a free certificate for … ? | **Y** (needs ports 80/443 forwarded; you can re-run later with `./setup/enable-https.sh`) |
 | Email for Let's Encrypt | Optional, just press Enter |
@@ -300,6 +301,10 @@ takcx plugin list
 ```
 To copy a file from your computer to the Pi:
 `scp ATAK-Plugin-xxxx.apk yourusername@takserver.local:~`
+
+### Emergency alerts on phones
+Already on if you said yes. Everyone's welcome page shows how to subscribe in the
+free **ntfy** app. Share the topic with family or base too. [Alerts guide](7-alerts.md)
 
 ### Meshtastic radios (no-signal areas)
 What to buy and how to set them up: [Meshtastic gear](6-meshtastic-gear.md).

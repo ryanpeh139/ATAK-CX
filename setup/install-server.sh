@@ -222,6 +222,20 @@ else
   fi
 fi
 
+# --------------------------------------------------------------------------- alerts
+step "Emergency alerts to phones"
+if [[ ${ALERTS_ENABLED:-no} == yes ]]; then
+  echo "Already on."
+else
+  echo "When anyone hits the emergency button in ATAK, subscribed phones get a loud"
+  echo "notification with a map link, even with ATAK closed (free ntfy app)."
+  if yes_no "Turn on emergency alerts?" Y; then
+    "$REPO_DIR/setup/enable-alerts.sh" || note "Alert setup failed; see above. You can re-run setup/enable-alerts.sh"
+    # shellcheck disable=SC1090
+    . "$TEAM_CONF"
+  fi
+fi
+
 # --------------------------------------------------------------------------- aircraft
 step "Aircraft on the map (ADS-B)"
 if [[ ${AIRCRAFT_ENABLED:-no} == yes ]]; then
@@ -267,6 +281,7 @@ Web map & admin:  https://$SERVER_ADDRESS/
 Admin login:      see $TAKCX_HOME/admin.conf
 Team radio:       $( [[ ${RADIO_ENABLED:-no} == yes ]] && echo "$SERVER_ADDRESS port 64738 (Mumla / Mumble apps)" || echo "off (turn on: setup/enable-radio.sh)" )
 Live video:       $( [[ ${VIDEO_ENABLED:-no} == yes ]] && echo "on (drones: takcx add-drone drone1 --share)" || echo "off (turn on: setup/enable-video.sh)" )
+Emergency alerts: $( [[ ${ALERTS_ENABLED:-no} == yes ]] && echo "on (ntfy topic: ${NTFY_TOPIC:-?})" || echo "off (turn on: setup/enable-alerts.sh)" )
 Aircraft:         $( [[ ${AIRCRAFT_ENABLED:-no} == yes ]] && echo "on, near ${AIRCRAFT_NEAR:-?}" || echo "off (turn on: takcx aircraft on --near \"Town\")" )
 
 Add your first buddy (and yourself!):

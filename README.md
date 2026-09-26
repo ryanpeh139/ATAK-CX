@@ -7,7 +7,7 @@ certificates, ports or server settings on anyone's phone.
 - **Works with:** ATAK (Android), iTAK (iPhone/iPad), WinTAK (Windows)
 - **You get:** live positions, encrypted team chat, a push-to-talk **team radio**
   (voice channels locked to your team), **live drone and camera video**, **live
-  aircraft** on the map, plugins pushed to everyone automatically, shared
+  aircraft** on the map, **emergency alerts pushed to phones**, plugins pushed to everyone automatically, shared
   markers, routes and photos, emergency alerts, a web map in your browser, and
   satellite + topo maps (downloadable for offline use) already on every device.
 - **Built on:** [OpenTAKServer](https://github.com/brian7704/OpenTAKServer),
@@ -90,8 +90,9 @@ The web map and admin panel are at `https://your-server/` (login in `~/takcx/adm
 4. [Team radio](docs/4-radio.md): push-to-talk voice channels
 5. [Plugins and extras](docs/5-plugins.md): push plugins to everyone, aircraft on the map, live video
 6. [Meshtastic gear](docs/6-meshtastic-gear.md): which off-grid radios to buy and how to set them up
-7. [Troubleshooting](docs/troubleshooting.md)
-8. [Backups, restore and upgrades](docs/maintenance.md)
+7. [Emergency alerts](docs/7-alerts.md): ATAK emergencies pushed to phones, Discord, Telegram
+8. [Troubleshooting](docs/troubleshooting.md)
+9. [Backups, restore and upgrades](docs/maintenance.md)
 
 ## What's in this repo
 
@@ -101,6 +102,8 @@ setup/enable-https.sh     free Let's Encrypt certificate (run by the installer)
 setup/enable-radio.sh     team radio: Mumble locked to takcx accounts (run by the installer)
 setup/enable-video.sh     live video for drones and cameras (run by the installer)
 setup/duckdns.sh          keep a free DuckDNS name pointed at a home server
+setup/enable-alerts.sh    emergency alerts to phones (ntfy / Discord / Telegram)
+takcx/alert_bridge.py     the alerts service
 setup/backup.sh           nightly backup of certificates, database and packages
 takcx/takcx.py            the `takcx` command
 maps/*.xml                map sources bundled into every package (add your own)

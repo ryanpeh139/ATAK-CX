@@ -549,6 +549,8 @@ PAGE = string.Template("""<!doctype html>
     </ol>
   </div>
 
+  $alerts_card
+
   $chat_card
 
   $radio_card
@@ -613,6 +615,7 @@ def onboarding_page(team, username, profile, files):
         atak_zip=h(files["atak"]), itak_zip=h(files["itak"]),
         maps_card=maps_card, web_login=web_login, chat_card=CHAT_CARD,
         video_card=VIDEO_CARD if team.get("VIDEO_ENABLED", "no").lower() == "yes" else "",
+        alerts_card=alerts_card(team),
         radio_card=radio_card(team, username, password) if radio else "")
 
 
@@ -640,6 +643,27 @@ VIDEO_CARD = """<div class="card">
           <b>Watch</b>.</li>
       <li><b>Stream your own camera:</b> on the web map, <b>Video Streams &rarr; Start Streaming</b>.</li>
     </ul>
+  </div>"""
+
+
+def alerts_card(team):
+    if team.get("ALERTS_ENABLED", "no").lower() != "yes" or not team.get("NTFY_TOPIC"):
+        return ""
+    h = html.escape
+    link = f"{(team.get('NTFY_SERVER') or 'https://ntfy.sh').rstrip('/')}/{team['NTFY_TOPIC']}"
+    return f"""<div class="card">
+    <h2>Emergency alerts on your phone</h2>
+    <p>If anyone hits the emergency button in ATAK, you get a loud notification with a map link,
+    even when ATAK is closed. Worth setting up for family at home too.</p>
+    <ol>
+      <li>Install <b>ntfy</b>:
+          <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy">Android</a> or
+          <a href="https://apps.apple.com/app/ntfy/id1625396347">iPhone</a>.</li>
+      <li>In ntfy tap <b>+</b> and subscribe to <b>{h(team['NTFY_TOPIC'])}</b>, or open
+          <a href="{h(link)}">this link</a> on your phone.</li>
+      <li>Allow notifications when asked.</li>
+    </ol>
+    <p>Keep the topic name within the team: anyone who has it can read the alerts.</p>
   </div>"""
 
 
@@ -1202,8 +1226,10 @@ def cmd_doctor(args):
 
     radio = radio_enabled()
     video = team_flag("VIDEO_ENABLED")
+    alerts = team_flag("ALERTS_ENABLED")
     print("Services")
-    for svc in SERVICES + (["mumble-server"] if radio else []) + (["mediamtx"] if video else []):
+    for svc in (SERVICES + (["mumble-server"] if radio else []) + (["mediamtx"] if video else [])
+                + (["takcx-alerts"] if alerts else [])):
         state = subprocess.run(["systemctl", "is-active", svc], capture_output=True,
                                text=True).stdout.strip() if shutil.which("systemctl") else "unknown"
         report(state == "active", f"{svc}: {state or 'not running'}", f"sudo systemctl restart {svc}; "
