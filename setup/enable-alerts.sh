@@ -15,7 +15,10 @@ TEAM_CONF="$TAKCX_HOME/team.conf"
 OTS_PY="$HOME/.opentakserver_venv/bin/python"
 
 die() { echo "Error: $*" >&2; exit 1; }
-ask() { local a; read -r -p "$1: " a < /dev/tty || true; echo "$a"; }
+ask() {  # arrow keys and control characters are stripped from answers
+  local a; read -r -e -p "$1: " a < /dev/tty || true
+  printf '%s' "$a" | sed $'s/\e\[[0-9;]*[A-Za-z]//g' | tr -cd '[:print:]' | sed 's/^ *//;s/ *$//'
+}
 set_conf() {  # set_conf KEY VALUE
   local tmp; tmp="$(mktemp)"
   grep -v "^$1=" "$TEAM_CONF" > "$tmp" || true

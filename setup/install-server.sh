@@ -22,14 +22,19 @@ bold=$'\e[1m'; green=$'\e[32m'; yellow=$'\e[33m'; red=$'\e[31m'; reset=$'\e[0m'
 step() { echo; echo "${bold}${green}==> $*${reset}"; }
 note() { echo "${yellow}$*${reset}"; }
 die()  { echo "${red}Error: $*${reset}" >&2; exit 1; }
+clean() {  # drop arrow-key escapes and other control characters from typed answers
+  printf '%s' "$1" | sed $'s/\e\[[0-9;]*[A-Za-z]//g' | tr -cd '[:print:]' | sed 's/^ *//;s/ *$//'
+}
 ask() {  # ask "Question" default -> answer on stdout
   local answer
-  read -r -p "$1 [${2}]: " answer < /dev/tty || true
+  read -r -e -p "$1 [${2}]: " answer < /dev/tty || true
+  answer="$(clean "$answer")"
   echo "${answer:-$2}"
 }
 yes_no() {  # yes_no "Question" Y|N
   local answer
-  read -r -p "$1 [$( [[ $2 == Y ]] && echo Y/n || echo y/N )]: " answer < /dev/tty || true
+  read -r -e -p "$1 [$( [[ $2 == Y ]] && echo Y/n || echo y/N )]: " answer < /dev/tty || true
+  answer="$(clean "$answer")"
   answer="${answer:-$2}"
   [[ $answer =~ ^[Yy] ]]
 }
