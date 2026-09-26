@@ -15,8 +15,10 @@ import collections
 import datetime
 import email.utils
 import glob
+import hashlib
 import html
 import http.client
+import json
 import os
 import re
 import secrets
@@ -27,7 +29,7 @@ import threading
 import time
 import uuid
 
-from flask import (Blueprint, Flask, abort, flash, redirect, render_template, request,
+from flask import (Blueprint, Flask, abort, flash, g, redirect, render_template, request,
                    send_file, session, url_for)
 from markupsafe import Markup
 
@@ -35,6 +37,7 @@ REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__fi
 sys.path.insert(0, os.path.join(REPO_DIR, "takcx"))
 import takcx as T  # noqa: E402
 import ots_update as U  # noqa: E402
+import brand as B  # noqa: E402
 
 PORT = int(os.environ.get("TAKCX_MANAGER_PORT", "8096"))
 TAKCX_PY = os.path.join(REPO_DIR, "takcx", "takcx.py")
@@ -106,15 +109,28 @@ def locked_out(ip):
     return len(_failures[ip]) >= LOCKOUT_TRIES
 
 
+OTS_COOKIES = ("session", "remember_token", "XSRF-TOKEN")  # OpenTAKServer's login (path /)
+DOWN = "down"
+
+
 class OtsLogin:
-    """Check a person's OpenTAKServer login (and admin role) via its API."""
+    """Someone's OpenTAKServer login, checked through its API.
+
+    The Manager and the web map share it: the cookies OpenTAKServer hands out when you log
+    in here go to the browser (path /), so the web map is logged in too, and the Manager
+    trusts a web map login the same way. Logging out of either ends both."""
 
     def __init__(self, cookies=None):
         self.api = T.OTS(T.load_team()["SERVER_ADDRESS"])
         self.api.cookies = dict(cookies or {})
 
-    def login(self, username, password):
-        status, data = self.api.request("POST", "/api/login", {"username": username, "password": password})
+    @classmethod
+    def from_browser(cls):
+        return cls({k: request.cookies[k] for k in OTS_COOKIES if request.cookies.get(k)})
+
+    def login(self, username, password, remember=False):
+        status, data = self.api.request("POST", "/api/login", {"username": username, "password": password,
+                                                               "remember": bool(remember)})
         resp = data.get("response", {}) if isinstance(data, dict) else {}
         if status == 200 and resp.get("tf_required"):
             return "2fa"
@@ -124,12 +140,70 @@ class OtsLogin:
         status, _ = self.api.request("POST", "/api/tf-validate", {"code": code})
         return status == 200
 
-    def is_admin(self):
-        status, me = self.api.request("GET", "/api/me")
-        if status != 200 or not isinstance(me, dict):
+    def me(self):
+        """The logged-in person ({username, is_admin, ...}), None if not logged in, or DOWN."""
+        try:
+            status, me = self.api.request("GET", "/api/me")
+        except T.TakcxError:
+            return DOWN
+        if status >= 500:
+            return DOWN
+        if status != 200 or not isinstance(me, dict) or not me.get("username") or not me.get("active", True):
             return None
-        roles = [r.get("name") for r in me.get("roles", [])]
-        return me.get("username") if "administrator" in roles and me.get("active", True) else None
+        me["is_admin"] = "administrator" in [r.get("name") for r in me.get("roles", [])]
+        return me
+
+    def logout(self):
+        self.api.request("POST", "/api/logout")
+
+
+def give_browser(resp, cookies):
+    """Pass OpenTAKServer's login cookies on to the browser, for the whole site."""
+    for name, value in cookies.items():
+        if name in OTS_COOKIES:
+            resp.set_cookie(name, value, path="/", secure=not INSECURE_COOKIES, samesite="Strict",
+                            httponly=name != "XSRF-TOKEN",  # the web map's scripts read XSRF-TOKEN
+                            max_age=365 * 86400 if name == "remember_token" else None)
+    return resp
+
+
+def clear_browser(resp):
+    for name in OTS_COOKIES:
+        resp.delete_cookie(name, path="/", secure=not INSECURE_COOKIES, samesite="Strict")
+    return resp
+
+
+_seen = collections.OrderedDict()  # hash of the browser's login cookies -> (checked at, me)
+
+
+def browser_login():
+    """Whose shared login this browser has, checked with OpenTAKServer at most every 30 s."""
+    ots = OtsLogin.from_browser()
+    if not (ots.api.cookies.get("session") or ots.api.cookies.get("remember_token")):
+        return None
+    key = hashlib.sha256(json.dumps(ots.api.cookies, sort_keys=True).encode()).hexdigest()
+    hit = _seen.get(key)
+    if hit and time.time() - hit[0] < 30:
+        return hit[1]
+    before = dict(ots.api.cookies)
+    me = ots.me()
+    if me == DOWN:
+        return hit[1] if hit else DOWN
+    renewed = {k: v for k, v in ots.api.cookies.items() if before.get(k) != v}
+    if renewed:  # e.g. a new session made from "keep me logged in"
+        g.ots_cookies = renewed
+    _seen[key] = (time.time(), me)
+    while len(_seen) > 500:
+        _seen.popitem(last=False)
+    return me
+
+
+def safe_next(value):
+    """Only ever send people on to a page of this site."""
+    value = (value or "").strip()
+    if not value.startswith("/") or value.startswith("//") or any(c in value for c in "\\\r\n"):
+        return ""
+    return value
 
 
 def csrf_token():
@@ -138,16 +212,46 @@ def csrf_token():
     return session["csrf"]
 
 
+def start_session(username):
+    session.clear()
+    session.permanent = True
+    session["user"] = username
+    csrf_token()
+
+
+PUBLIC = ("m.login", "m.two_factor", "m.change_password", "m.logout")
+
+
 @bp.before_request
 def require_login():
-    if request.endpoint in ("m.login", "m.two_factor", "m.change_password"):
-        pass
-    elif not session.get("user"):
-        return redirect(url_for("m.login"))
+    if request.endpoint not in PUBLIC:
+        me = browser_login()
+        if me == DOWN:
+            # OpenTAKServer itself is down: keep the Manager usable so it can be restarted.
+            allowed = bool(session.get("user"))
+        elif me and me["is_admin"]:
+            if session.get("user") != me["username"]:
+                start_session(me["username"])  # logged in on the web map: no second login
+            allowed = True
+        else:
+            allowed = False
+            if me:
+                flash(f"You're logged in as {me['username']}, but the Manager is for server admins.", "warn")
+        if not allowed:
+            session.pop("user", None)
+            nxt = request.full_path.rstrip("?") if request.method == "GET" else ""
+            return redirect(url_for("m.login", next=nxt or None))
     if request.method == "POST":
         sent = request.form.get("csrf", "")
         if not sent or not secrets.compare_digest(sent, session.get("csrf", "")):
             abort(400, "Form expired. Go back, reload the page and try again.")
+
+
+@bp.after_request
+def renew_browser_login(resp):
+    if g.get("ots_cookies"):
+        give_browser(resp, g.ots_cookies)
+    return resp
 
 
 @bp.app_context_processor
@@ -160,30 +264,33 @@ def template_globals():
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
+    nxt = safe_next(request.values.get("next"))
     if request.method == "GET":
-        return render_template("login.html")
+        return render_template("login.html", next=nxt, bye=request.args.get("bye"))
     ip = client_ip()
+    page = lambda code: (render_template("login.html", next=nxt), code)  # noqa: E731
     if locked_out(ip):
         flash("Too many failed logins. Wait 5 minutes and try again.", "bad")
-        return render_template("login.html"), 429
-    username = request.form.get("username", "").strip()
+        return page(429)
+    username = request.form.get("username", "").strip().lower()
     password = request.form.get("password", "")
+    remember = bool(request.form.get("remember"))
     try:
         ots = OtsLogin()
-        result = ots.login(username, password)
+        result = ots.login(username, password, remember)
     except T.TakcxError as e:
         flash(str(e), "bad")
-        return render_template("login.html"), 503
+        return page(503)
     if result == "bad":
         _failures[ip].append(time.time())
         flash("Wrong username or password.", "bad")
-        return render_template("login.html"), 401
+        return page(401)
     if result == "2fa":
         session.clear()
-        session["pending_cookies"] = ots.api.cookies
-        session["pending_user"] = username
+        session.update(pending_cookies=ots.api.cookies, pending_next=nxt)
+        csrf_token()
         return redirect(url_for("m.two_factor"))
-    return finish_login(ots, ip)
+    return finish_login(ots, ip, nxt)
 
 
 @bp.route("/login/code", methods=["GET", "POST"])
@@ -201,22 +308,24 @@ def two_factor():
         _failures[ip].append(time.time())
         flash("That code didn't work. Codes change every 30 seconds.", "bad")
         return render_template("login.html", two_factor=True), 401
-    return finish_login(ots, ip)
+    return finish_login(ots, ip, safe_next(session.get("pending_next")))
 
 
-def finish_login(ots, ip):
-    admin = ots.is_admin()
-    if not admin:
-        _failures[ip].append(time.time())
+def finish_login(ots, ip, nxt):
+    """Logged in: admins go to the Manager, everyone else to the web map."""
+    me = ots.me()
+    if not me or me == DOWN:
         session.clear()
-        flash("That account isn't an administrator. Make one with: takcx add NAME --admin", "bad")
-        return render_template("login.html"), 403
+        flash("Couldn't finish logging in. Try again in a moment.", "bad")
+        return render_template("login.html", next=nxt), 503
     _failures.pop(ip, None)
-    session.clear()
-    session.permanent = True
-    session["user"] = admin
-    csrf_token()
-    return redirect(url_for("m.status"))
+    if me["is_admin"]:
+        start_session(me["username"])
+        dest = nxt or url_for("m.status")
+    else:
+        session.clear()
+        dest = nxt if nxt and not nxt.startswith("/manage") else "/"
+    return give_browser(redirect(dest), ots.api.cookies)
 
 
 @bp.route("/password", methods=["GET", "POST"])
@@ -280,8 +389,13 @@ def change_password():
 
 @bp.route("/logout", methods=["POST"])
 def logout():
+    """Log out of the Manager and the web map together."""
+    try:
+        OtsLogin.from_browser().logout()
+    except T.TakcxError:
+        pass  # the browser forgets the login below either way
     session.clear()
-    return redirect(url_for("m.login"))
+    return clear_browser(redirect(url_for("m.login", bye=1)))
 
 
 # --------------------------------------------------------------------------- jobs
@@ -805,6 +919,8 @@ def settings():
     commands = []
     if set(changed) & {"TEAM_NAME", "DEFAULT_TEAM_COLOR", "DEFAULT_ROLE", "COORD_FORMAT", "INCLUDE_MAPS"}:
         commands.append(takcx("rebuild", "--all"))
+    if "TEAM_NAME" in changed and team.get("WEBMAP_THEME") == "yes":
+        commands.append(takcx("webmap-theme", "on"))
     if "RADIO_CHANNELS" in changed and team.get("RADIO_ENABLED") == "yes":
         commands.append([OTS_PY, os.path.join(REPO_DIR, "setup", "radio_channels.py"),
                          *new["RADIO_CHANNELS"].split(",")])
@@ -904,89 +1020,17 @@ def team_hex(color):
     return TEAM_COLOR_HEX.get(color or "", "#8b998e")
 
 
-# Line icons (24x24, drawn with currentColor), inlined so the page loads nothing from outside.
-ICONS = {
-    "status": '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
-    "people": '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'
-              '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-    "drone": '<circle cx="12" cy="12" r="2.5"/><path d="M10 10 7 7M14 10l3-3M10 14l-3 3M14 14l3 3"/>'
-             '<circle cx="5.5" cy="5.5" r="2.5"/><circle cx="18.5" cy="5.5" r="2.5"/>'
-             '<circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
-    "addons": '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/>'
-              '<polyline points="2 12 12 17 22 12"/>',
-    "plugins": '<path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0V8zM12 17v5"/>',
-    "settings": '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
-    "backups": '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/>'
-               '<line x1="10" y1="12" x2="14" y2="12"/>',
-    "troubleshoot": '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94'
-                    'l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
-    "jobs": '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
-    "logout": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/>'
-              '<line x1="21" y1="12" x2="9" y2="12"/>',
-    "ok": '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
-    "alert": '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
-             '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
-    "restart": '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
-    "more": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
-    "link": '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
-            '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
-    "key": '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
-    "radio": '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/>'
-             '<line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
-    "video": '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
-    "bell": '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
-    "map": '<polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/>'
-           '<line x1="16" y1="6" x2="16" y2="22"/>',
-    "mountain": '<path d="m3 20 6.5-12 4 7 2.5-4L21 20z"/>',
-    "plane": '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5'
-             'l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2'
-             'c.4-.3.6-.7.5-1.2z"/>',
-    "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
-    "plus": '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
-    "download": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/>'
-                '<line x1="12" y1="15" x2="12" y2="3"/>',
-    "upload": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/>'
-              '<line x1="12" y1="3" x2="12" y2="15"/>',
-    "menu": '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/>'
-            '<line x1="3" y1="18" x2="21" y2="18"/>',
-    "globe": '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>'
-             '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
-    "disk": '<line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6'
-            'l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/>',
-    "phone": '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
-    "trash": '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4'
-             'a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
-    "lock": '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
-    "back": '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
-}
-
-
 @bp.app_template_global()
 def icon(name, size=18):
-    return Markup(f'<svg class="ico" width="{int(size)}" height="{int(size)}" viewBox="0 0 24 24" fill="none" '
-                  'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-                  f'aria-hidden="true">{ICONS.get(name, "")}</svg>')
+    return Markup(B.icon_svg(name, size))
 
 
 @bp.app_template_global()
 def emblem(team_name, size=40):
-    """The team badge: a shield with the team's initials."""
-    text = html.escape(initials(team_name))
-    font = 15 if len(text) < 3 else 12
-    return Markup(f'<svg class="emblem" width="{int(size)}" height="{int(size * 1.1)}" viewBox="0 0 40 44" '
-                  'aria-hidden="true"><path d="M20 2 37 8v13c0 10.5-7.4 17.6-17 21C10.4 38.6 3 31.5 3 21V8z" '
-                  'fill="#18231b" stroke="currentColor" stroke-width="2.2"/>'
-                  '<path d="M20 7 32 11.3v9.4c0 7.6-5.2 12.8-12 15.5-6.8-2.7-12-7.9-12-15.5v-9.4z" '
-                  'fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/>'
-                  f'<text x="20" y="{25 if font == 15 else 24.5}" text-anchor="middle" font-size="{font}" '
-                  'font-weight="800" letter-spacing=".5" fill="currentColor" '
-                  f'font-family="ui-monospace,Menlo,Consolas,monospace">{text}</text></svg>')
+    return Markup(B.emblem_svg(team_name, size))
 
 
-@bp.app_template_global()
-def initials(name):
-    words = re.findall(r"[A-Za-z0-9]+", name or "")
-    return ("".join(w[0] for w in words[:2]) or "CX").upper()
+bp.add_app_template_global(B.initials, "initials")
 
 
 @bp.app_template_filter("mb")

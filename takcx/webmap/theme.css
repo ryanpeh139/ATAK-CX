@@ -1,0 +1,111 @@
+/* ATAK-CX: the Manager's look for OpenTAKServer's web map.
+   Installed by `takcx webmap-theme on` into the web map's folder; re-applied after updates.
+   Mostly recolours the app's own (Mantine) palette, so every page follows along. */
+
+html:root[data-mantine-color-scheme=dark] {
+  --takcx-bg: #0d120f; --takcx-panel: #141b16; --takcx-panel2: #19221c; --takcx-line: #26312a;
+  --takcx-line2: #34423a; --takcx-ink: #e2e9e1; --takcx-muted: #8b998e; --takcx-accent: #9bd36a;
+  --takcx-accent2: #c3e89f; --takcx-accentbg: #1f2e1c; --takcx-on-accent: #0d120f;
+  --takcx-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Mantine's dark palette -> the Manager's greens and greys */
+  --mantine-color-dark-0: #e2e9e1; --mantine-color-dark-1: #c9d3c8; --mantine-color-dark-2: #8b998e;
+  --mantine-color-dark-3: #6d7a70; --mantine-color-dark-4: #34423a; --mantine-color-dark-5: #26312a;
+  --mantine-color-dark-6: #19221c; --mantine-color-dark-7: #141b16; --mantine-color-dark-8: #111713;
+  --mantine-color-dark-9: #0d120f;
+  --mantine-color-body: #141b16; --mantine-color-text: #e2e9e1; --mantine-color-dimmed: #8b998e;
+  --mantine-color-default: #0f1511; --mantine-color-default-hover: #19221c; --mantine-color-default-border: #34423a;
+  --mantine-color-placeholder: #6d7a70;
+
+  /* the primary colour (blue) -> signal green */
+  --mantine-color-blue-0: #eef8e6; --mantine-color-blue-1: #dcefcb; --mantine-color-blue-2: #c3e89f;
+  --mantine-color-blue-3: #aedd84; --mantine-color-blue-4: #9bd36a; --mantine-color-blue-5: #8cc75a;
+  --mantine-color-blue-6: #7ab24a; --mantine-color-blue-7: #679a3c; --mantine-color-blue-8: #577f33;
+  --mantine-color-blue-9: #46672a;
+  --mantine-color-blue-filled: #9bd36a; --mantine-color-blue-filled-hover: #c3e89f;
+  --mantine-color-blue-light: #1f2e1c; --mantine-color-blue-light-hover: #273a22;
+  --mantine-color-blue-light-color: #c3e89f; --mantine-color-blue-outline: #9bd36a;
+  --mantine-color-blue-outline-hover: rgba(155, 211, 106, .08); --mantine-color-blue-text: #9bd36a;
+  --mantine-color-anchor: #9bd36a;
+  --mantine-primary-color-filled: #9bd36a; --mantine-primary-color-filled-hover: #c3e89f;
+  --mantine-primary-color-light: #1f2e1c; --mantine-primary-color-light-hover: #273a22;
+  --mantine-primary-color-light-color: #c3e89f; --mantine-primary-color-contrast: #0d120f;
+  --mantine-radius-default: 10px;
+  --mantine-font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mantine-font-family-headings: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html.takcx body { background: var(--takcx-bg); color: var(--takcx-ink); -webkit-font-smoothing: antialiased; }
+
+/* ---- the frame: header and sidebar like the Manager's ---- */
+html.takcx .mantine-AppShell-header { background: rgba(20, 27, 22, .97) !important; border-bottom: 1px solid var(--takcx-line) !important; }
+html.takcx .mantine-AppShell-header img { display: none !important; }             /* OpenTAKServer's logo */
+html.takcx .mantine-AppShell-header .mantine-Burger-burger { --burger-color: var(--takcx-ink); }
+html.takcx .mantine-AppShell-navbar { background: #141b16 !important; border-right: 1px solid var(--takcx-line) !important; padding-top: 10px; }
+html.takcx .mantine-AppShell-main {
+  background: var(--takcx-bg) !important;
+  background-image: linear-gradient(rgba(155, 211, 106, .035) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(155, 211, 106, .035) 1px, transparent 1px) !important;
+  background-size: 32px 32px !important;
+}
+
+.takcx-brand { display: flex; align-items: center; gap: 10px; color: var(--takcx-ink) !important; text-decoration: none !important; min-width: 0; }
+.takcx-brand .emblem { color: var(--takcx-accent); flex: none; display: block; }
+.takcx-brand b { display: block; font-size: 1rem; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.takcx-brand small { display: block; color: var(--takcx-muted); font-size: .68rem; letter-spacing: 1.6px; text-transform: uppercase; }
+
+html.takcx .mantine-AppShell-navbar .mantine-NavLink-root {
+  border-radius: 9px; color: var(--takcx-muted); font-weight: 500; margin-top: 2px !important; padding: 9px 10px;
+}
+html.takcx .mantine-AppShell-navbar .mantine-NavLink-root:hover { background: var(--takcx-panel2); color: var(--takcx-ink); }
+html.takcx .mantine-AppShell-navbar .mantine-NavLink-root:hover svg { color: var(--takcx-ink); }
+html.takcx .mantine-AppShell-navbar .mantine-NavLink-root[data-active],
+html.takcx .mantine-AppShell-navbar .mantine-NavLink-root[data-active]:hover {
+  background: var(--takcx-accentbg); color: var(--takcx-accent); box-shadow: inset 3px 0 0 var(--takcx-accent);
+}
+html.takcx .mantine-AppShell-navbar .mantine-NavLink-root[data-active] svg { color: var(--takcx-accent); }
+html.takcx .mantine-AppShell-navbar .mantine-NavLink-label { font-size: .95rem; }
+html.takcx .takcx-hidden { display: none !important; }
+
+/* the Manager's links, added to the sidebar */
+.takcx-nav { margin: 10px 0 4px; padding: 10px 0 6px; border-top: 1px solid var(--takcx-line); border-bottom: 1px solid var(--takcx-line); }
+.takcx-nav-title { color: var(--takcx-muted); font-size: .72rem; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; padding: 4px 10px 6px; }
+.takcx-link { display: flex; align-items: center; gap: 24px; padding: 9px 10px; border-radius: 9px; color: var(--takcx-muted) !important;
+              font-size: .95rem; font-weight: 500; text-decoration: none !important; }
+.takcx-link:hover { background: var(--takcx-panel2); color: var(--takcx-ink) !important; }
+.takcx-link .ico { flex: none; width: 25px; height: 25px; stroke-width: 1.5; }  /* same as the app's own icons */
+
+/* ---- surfaces ---- */
+html.takcx .mantine-Paper-root:not([style*="background"]) { border-color: var(--takcx-line); }
+html.takcx .mantine-Paper-root[data-with-border] { border: 1px solid var(--takcx-line); }
+html.takcx .mantine-Card-root { border: 1px solid var(--takcx-line); box-shadow: none !important; }
+html.takcx .mantine-Title-root { letter-spacing: .2px; }
+html.takcx .mantine-Divider-root { --divider-color: var(--takcx-line); }
+
+/* the app's primary buttons: light green with dark text, like the Manager's */
+html.takcx .mantine-Button-root[data-variant="filled"]:not([style*="--button-bg"]) { color: var(--takcx-on-accent); font-weight: 650; }
+html.takcx .mantine-Button-root { border-radius: 9px; }
+html.takcx .mantine-Badge-root { letter-spacing: .3px; }
+html.takcx .mantine-Input-input:focus, html.takcx .mantine-Input-input:focus-within { border-color: var(--takcx-accent); }
+html.takcx .mantine-Switch-track[data-checked], html.takcx .mantine-Checkbox-input:checked { color: var(--takcx-on-accent); }
+
+/* tables */
+html.takcx .mantine-Table-th, html.takcx .mantine-datatable thead th {
+  color: var(--takcx-muted); font-size: .72rem; letter-spacing: 1.2px; text-transform: uppercase; font-weight: 700;
+}
+html.takcx table a { color: var(--takcx-accent); text-decoration: none; }
+
+/* ---- map ---- */
+html.takcx .leaflet-container { background: #0f1511; font: inherit; }
+html.takcx .leaflet-bar a, html.takcx .leaflet-control-layers, html.takcx .leaflet-control-layers-toggle {
+  background-color: var(--takcx-panel2); color: var(--takcx-ink); border-color: var(--takcx-line2);
+}
+html.takcx .leaflet-bar { border: 1px solid var(--takcx-line2) !important; box-shadow: 0 6px 18px rgba(0,0,0,.45) !important; }
+html.takcx .leaflet-bar a:hover { background-color: var(--takcx-line); color: var(--takcx-accent); }
+html.takcx .leaflet-control-layers { border: 1px solid var(--takcx-line2) !important; border-radius: 10px; }
+html.takcx .leaflet-control-layers-toggle { filter: invert(.85) hue-rotate(40deg); background-color: transparent; }
+html.takcx .leaflet-popup-content-wrapper, html.takcx .leaflet-popup-tip { background: var(--takcx-panel); color: var(--takcx-ink); }
+html.takcx .leaflet-control-attribution { background: rgba(13, 18, 15, .75) !important; color: var(--takcx-muted); }
+html.takcx .leaflet-control-attribution a { color: var(--takcx-accent); }
+html.takcx .leaflet-control-scale-line { background: rgba(13, 18, 15, .7); color: var(--takcx-ink); border-color: var(--takcx-muted); }
+html.takcx .leaflet-tooltip { background: var(--takcx-panel); color: var(--takcx-ink); border-color: var(--takcx-line2); }

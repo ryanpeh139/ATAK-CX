@@ -31,7 +31,7 @@ WEB_ROOT = os.environ.get("TAKCX_WEB_ROOT", "/var/www/html/opentakserver")
 VENV_BIN = os.path.dirname(sys.executable)
 UI_REPO = "https://github.com/brian7704/OpenTAKServer-UI"
 UI_VERSION_FILE = os.path.join(WEB_ROOT, ".takcx-ui-version")
-KEEP = {"join", "files"}  # ATAK-CX's own folders in the web map's folder
+KEEP = {"join", "files", "takcx"}  # ATAK-CX's own folders in the web map's folder
 HEALTH_URL = "http://127.0.0.1:8081/api/health"
 
 
@@ -164,6 +164,11 @@ def update_ui(tag):
     with open(UI_VERSION_FILE, "w") as f:
         f.write(tag + "\n")
     print(f"Web map is now {tag}. Your private links and downloads were kept.", flush=True)
+    conf = os.path.join(os.environ.get("TAKCX_HOME", os.path.expanduser("~/takcx")), "team.conf")
+    if os.path.exists(conf) and re.search(r'^WEBMAP_THEME="?yes', open(conf).read(), re.M):
+        r = subprocess.run([sys.executable, os.path.join(REPO_DIR, "takcx", "takcx.py"), "webmap-theme", "on"])
+        if r.returncode != 0:
+            print("(Couldn't re-apply the team look to the web map; run: takcx webmap-theme on)", flush=True)
 
 
 def rollback_help(old):

@@ -212,7 +212,11 @@ class OTS:
         for header, value in resp.getheaders():
             if header.lower() == "set-cookie":
                 name, _, rest = value.partition("=")
-                self.cookies[name.strip()] = rest.split(";", 1)[0]
+                value = rest.split(";", 1)[0]
+                if value and "expires=thu, 01 jan 1970" not in rest.lower() and "max-age=0" not in rest.lower():
+                    self.cookies[name.strip()] = value
+                else:
+                    self.cookies.pop(name.strip(), None)  # the server deleted it
         raw = resp.read().decode(errors="replace")
         conn.close()
         try:
@@ -1226,6 +1230,75 @@ def cmd_unshare(args):
     unshare(check_username(args.name))
 
 
+WEBMAP_THEME_DIR = os.path.join(REPO_DIR, "takcx", "webmap")
+WEBMAP_MARK = ("<!-- takcx-theme -->", "<!-- /takcx-theme -->")
+WEBMAP_ICONS = ["status", "people", "drone", "addons", "settings", "troubleshoot", "key"]
+
+
+def webmap_theme_on(team):
+    """Give the web map the Manager's look and login (files in WEB_ROOT/takcx/ plus three
+    lines in its index.html). Safe to run again; the web map updater re-runs it."""
+    import brand
+    index = os.path.join(WEB_ROOT, "index.html")
+    if not os.path.isfile(index):
+        raise TakcxError(f"No web map at {WEB_ROOT} (index.html is missing).")
+    if not os.access(WEB_ROOT, os.W_OK) or not os.access(index, os.W_OK):
+        raise TakcxError(f"Can't write to the web map's folder ({WEB_ROOT}).")
+    dest = os.path.join(WEB_ROOT, "takcx")
+    os.makedirs(dest, exist_ok=True)
+    config = {"team": team.get("TEAM_NAME", "ATAK-CX"),
+              "emblem": brand.emblem_svg(team.get("TEAM_NAME", "ATAK-CX"), 30),
+              "icons": {k: brand.ICONS[k] for k in WEBMAP_ICONS},
+              "manager": team.get("MANAGER_ENABLED", "no").lower() == "yes"}
+    files = {"brand.js": "window.TAKCX = " + json.dumps(config) + ";\n"}
+    for name in ("theme.css", "theme.js"):
+        files[name] = open(os.path.join(WEBMAP_THEME_DIR, name)).read()
+    for name, text in files.items():
+        with open(os.path.join(dest, name), "w") as f:
+            f.write(text)
+    stamp = uuid.uuid5(uuid.NAMESPACE_URL, "".join(files.values())).hex[:10]  # new files -> browsers reload them
+    block = (f"{WEBMAP_MARK[0]}<script src=\"/takcx/brand.js?v={stamp}\"></script>"
+             f"<script src=\"/takcx/theme.js?v={stamp}\"></script>"
+             f"<link rel=\"stylesheet\" href=\"/takcx/theme.css?v={stamp}\">{WEBMAP_MARK[1]}")
+    html_text = webmap_unpatched(open(index).read())
+    if "</head>" not in html_text:
+        raise TakcxError("The web map's index.html has no </head>; not changing it.")
+    with open(index, "w") as f:
+        f.write(html_text.replace("</head>", block + "\n</head>", 1))
+
+
+def webmap_unpatched(text):
+    start, end = text.find(WEBMAP_MARK[0]), text.find(WEBMAP_MARK[1])
+    if start != -1 and end != -1:
+        text = text[:start] + text[end + len(WEBMAP_MARK[1]):].lstrip("\n")
+    return text
+
+
+def cmd_webmap_theme(args):
+    team = load_team()
+    conf = os.path.join(TAKCX_HOME, "team.conf")
+    index = os.path.join(WEB_ROOT, "index.html")
+    if args.action == "on":
+        webmap_theme_on(team)
+        write_shell_conf_value(conf, "WEBMAP_THEME", "yes")
+        print("The web map now has the Manager's look" +
+              (" and shares its login." if team.get("MANAGER_ENABLED") == "yes" else
+               ". (Turn on the Manager, setup/enable-manager.sh, for one login for both.)"))
+        print("Reload the web map in your browser to see it.")
+    elif args.action == "off":
+        if os.path.isfile(index):
+            with open(index) as f:
+                text = f.read()
+            with open(index, "w") as f:
+                f.write(webmap_unpatched(text))
+        shutil.rmtree(os.path.join(WEB_ROOT, "takcx"), ignore_errors=True)
+        write_shell_conf_value(conf, "WEBMAP_THEME", "no")
+        print("The web map is back to OpenTAKServer's own look and login.")
+    else:
+        on = os.path.isfile(index) and WEBMAP_MARK[0] in open(index).read()
+        print(f"Web map theme: {'on' if on else 'off'}")
+
+
 def cmd_maps(args):
     team = load_team()
     os.makedirs(TAKCX_HOME, exist_ok=True)
@@ -1641,6 +1714,9 @@ def main(argv=None):
     p = sub.add_parser("reset-password", help="give someone a new password (radio, web map, video)")
     p.add_argument("name")
     p.set_defaults(func=cmd_reset_password)
+    p = sub.add_parser("webmap-theme", help="give the web map the Manager's look and login (on/off)")
+    p.add_argument("action", nargs="?", choices=["on", "off", "status"], default="status")
+    p.set_defaults(func=cmd_webmap_theme)
     p = sub.add_parser("set-password", help="set a password someone picked (typed, or read from stdin)")
     p.add_argument("name")
     p.set_defaults(func=cmd_set_password)

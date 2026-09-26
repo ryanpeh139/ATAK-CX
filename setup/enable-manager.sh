@@ -81,6 +81,10 @@ for _ in $(seq 1 10); do
     echo
     sed -i 's/^MANAGER_ENABLED=.*/MANAGER_ENABLED="yes"/' "$TEAM_CONF"
     grep -q '^MANAGER_ENABLED=' "$TEAM_CONF" || echo 'MANAGER_ENABLED="yes"' >> "$TEAM_CONF"
+    # One login and one look for the Manager and the web map (undo: takcx webmap-theme off).
+    if ! grep -q '^WEBMAP_THEME="no"' "$TEAM_CONF"; then
+      "$OTS_PY" "$REPO_DIR/takcx/takcx.py" webmap-theme on >/dev/null && echo "The web map now shares the Manager's look and login."
+    fi
     cat <<EOF
 
 The Manager is at: https://${SERVER_ADDRESS:-your-server}/manage/

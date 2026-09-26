@@ -31,7 +31,7 @@
 
   /* ---- shell: sidebar on wide screens, top bar + menu on phones ---- */
   .side { position:fixed; inset:0 auto 0 0; width:232px; background:rgba(20,27,22,.96); border-right:1px solid var(--line);
-          display:flex; flex-direction:column; padding:18px 12px; }
+          display:flex; flex-direction:column; padding:18px 12px; overflow-y:auto; }
   .brand { display:flex; gap:10px; align-items:center; padding:0 8px 18px; margin-bottom:10px; border-bottom:1px solid var(--line); color:var(--ink); }
   .brand:hover { text-decoration:none; color:var(--ink); }
   .brand b { display:block; font-size:1rem; line-height:1.2; letter-spacing:.2px; }
@@ -42,6 +42,7 @@
   .nav a.on { background:var(--accentbg); color:var(--accent); box-shadow:inset 3px 0 0 var(--accent); }
   .nav .count { margin-left:auto; background:var(--warn); color:var(--on-accent); border-radius:999px; font-size:.72rem; font-weight:700; padding:0 7px; }
   .nav .sep { height:1px; background:var(--line); margin:8px 4px; }
+  .nav .navtitle { color:var(--muted); font-size:.72rem; font-weight:700; letter-spacing:1.4px; text-transform:uppercase; padding:2px 10px 4px; }
   .me { margin-top:auto; padding:12px 8px 0; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; }
   .me .who { flex:1; min-width:0; }
   .me .who b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -225,9 +226,12 @@
                              ('m.backups', 'Backups', 'backups'), ('m.troubleshoot', 'Troubleshoot', 'troubleshoot')] %}
     <a href="{{ url_for(ep) }}" class="{{ 'on' if here == ep or (ep == 'm.people' and here == 'm.person_login') }}">{{ icon(ic) }}{{ label }}</a>
     {% endfor %}
-    <div class="sep"></div>
     <a href="{{ url_for('m.jobs') }}" class="{{ 'on' if here in ('m.jobs', 'm.job') }}">{{ icon('jobs') }}Jobs{% if running_jobs %}<span class="count">{{ running_jobs }}</span>{% endif %}</a>
-    <a href="https://{{ team.get('SERVER_ADDRESS', '') }}/">{{ icon('globe') }}Web map</a>
+    <div class="sep"></div>
+    <div class="navtitle">Map</div>
+    <a href="/map">{{ icon('map') }}Live map</a>
+    <a href="/video_streams">{{ icon('video') }}Video streams</a>
+    <a href="/dashboard">{{ icon('globe') }}Server dashboard</a>
   </nav>
 {% endmacro %}
 {% macro me() %}

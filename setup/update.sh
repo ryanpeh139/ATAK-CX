@@ -41,6 +41,11 @@ fi
   echo "== 2/4 OpenTAKServer and the web map"
   "$OTS_PY" "$REPO_DIR/takcx/ots_update.py"
 
+  # The web map gets the Manager's look and login (unless it was turned off).
+  if grep -q '^MANAGER_ENABLED="yes"' "$TAKCX_HOME/team.conf" && ! grep -q '^WEBMAP_THEME="no"' "$TAKCX_HOME/team.conf"; then
+    "${TAKCX[@]}" webmap-theme on || echo "(Couldn't theme the web map; see above.)"
+  fi
+
   echo "== 3/4 Welcome pages and packages"
   if [[ -n $(ls -A "$TAKCX_HOME/buddies" 2>/dev/null) ]]; then
     "${TAKCX[@]}" rebuild --all

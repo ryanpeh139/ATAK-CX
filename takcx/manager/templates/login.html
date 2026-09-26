@@ -5,8 +5,9 @@
   <div style="text-align:center;margin-bottom:22px">
     <div style="display:inline-block">{{ emblem(team_name, 72) }}</div>
     <h1 style="justify-content:center;margin-top:12px">{{ team_name }}</h1>
-    <div class="muted" style="letter-spacing:2px;text-transform:uppercase;font-size:.75rem;font-weight:700">Manager</div>
+    <div class="muted" style="letter-spacing:2px;text-transform:uppercase;font-size:.75rem;font-weight:700">Team login</div>
   </div>
+  {% if bye %}<div class="flash ok">{{ icon('ok') }}<div>You're logged out of the map and the Manager.</div></div>{% endif %}
   <div class="card" style="padding:22px">
   {% if two_factor %}
   <p class="muted">{{ icon('lock', 15) }} Enter the 6-digit code from your authenticator app.</p>
@@ -19,14 +20,17 @@
   {% else %}
   <form method="post" action="{{ url_for('m.login') }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
     <label for="u">Username</label>
-    <input type="text" id="u" name="username" autocomplete="username" autocapitalize="none" autofocus required>
+    <input type="text" id="u" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus required>
     <label for="p" style="margin-top:12px">Password</label>
     <input type="password" id="p" name="password" autocomplete="current-password" required>
+    <label class="check" style="margin-top:14px"><input type="checkbox" name="remember"> Keep me logged in on this device</label>
     <button style="width:100%;justify-content:center;margin-top:18px">{{ icon('lock', 16) }}Log in</button>
   </form>
   {% endif %}
   </div>
-  <p class="note" style="text-align:center">Server administrators only. On the team?<br><a href="{{ url_for('m.change_password') }}">Change your own password</a></p>
+  <p class="note" style="text-align:center">Same username and password as the team radio. Admins go to the Manager;
+    everyone else goes to the live map.<br><a href="{{ url_for('m.change_password') }}">Change your password</a></p>
 </div>
 {% endblock %}

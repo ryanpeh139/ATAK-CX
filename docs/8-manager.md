@@ -15,6 +15,26 @@ A web page for running your server without SSH:
 | **Troubleshoot** | Recent radio logins and TAK connections, each with the reason it was refused; restart buttons for every service; recent errors |
 | **Jobs** | Every action runs as a job; watch its output live |
 
+## One look, one login: the Manager and the web map
+
+The web map (`https://<your-server>/`) gets the same dark look, your team's name and emblem,
+and **one login shared with the Manager**:
+
+- Opening the web map (or the Manager) shows the **team login** page. Everyone uses their
+  usual username and password (the same as for the radio). **Admins** land in the Manager;
+  **everyone else** lands on the live map.
+- Logged into one, you're logged into the other: the web map's sidebar has a **Manager**
+  section for admins (People, Drones, Add-ons, Settings…), and the Manager's sidebar has
+  **Live map**, **Video streams** and **Server dashboard**.
+- **Log out** anywhere logs you out of both. **Keep me logged in on this device** on the
+  login page lasts a year on that browser.
+- Everyone gets **Change my password** in the web map's sidebar.
+
+This is a small add-on layer (`takcx/webmap/`), not a change to OpenTAKServer: it's re-applied
+after every web map update. `takcx webmap-theme off` puts OpenTAKServer's own look and login
+back (`on` to return). To reach OpenTAKServer's own login page once, add `?native=1` to the
+address, e.g. `https://<your-server>/login?native=1`.
+
 Click anyone's name (or **Show login**) to see their username, password and welcome-page
 link with its QR code, or give them a **new password**. Their ATAK stays connected
 because it uses a certificate; only the radio, web map and video use the password.
@@ -78,7 +98,10 @@ password. ATAK, the radio and video aren't affected.
 
 ## Security notes
 
-- Only OpenTAKServer **administrator** accounts can log in. Buddies can't.
+- Only OpenTAKServer **administrator** accounts get into the Manager. Buddies who log in on
+  the team login page go to the map instead.
+- The login is OpenTAKServer's own (its cookies are shared with the web map), checked again
+  every 30 seconds, so disabling someone or removing their admin role takes effect right away.
 - 5 wrong passwords or codes from one address → locked out for 5 minutes (the
   change-password page counts too).
 - The change-password page only changes accounts made with takcx, never the built-in

@@ -6,6 +6,14 @@ Start with this on the server. It checks services, DNS, ports and the firewall:
 takcx doctor
 ```
 
+## Can't log in to the web map, or it keeps going back to the login page
+
+The web map shares the Manager's team login. Check that the Manager is running
+(`sudo systemctl status takcx-manager`), and that the username is all lowercase. Clearing the
+site's cookies in the browser fixes a stuck login. To use OpenTAKServer's own login page
+instead, open `https://<your-server>/login?native=1`; to turn the shared login and look off
+entirely: `takcx webmap-theme off`.
+
 ## ATAK works on Wi-Fi but not on mobile data
 
 The router isn't forwarding the ports to the server (on Wi-Fi the phone is inside your
