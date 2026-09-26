@@ -17,7 +17,7 @@ in `~/takcx/buddies/bob/`:
 | `CX-bob-iTAK.zip` | iPhone / iPad (iTAK) |
 | `CX-maps.zip` | Maps only (already included in the ATAK zip) |
 | `index.html` | Step-by-step page for Bob |
-| `credentials.txt` | Bob's username/password for the web map (and Mumble) |
+| `credentials.txt` | Bob's username/password for the web map and team radio |
 
 ### Options
 

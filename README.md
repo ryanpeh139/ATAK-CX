@@ -5,7 +5,8 @@ map, and **one file per person** to get them connected. No fiddling with
 certificates, ports or server settings on anyone's phone.
 
 - **Works with:** ATAK (Android), iTAK (iPhone/iPad), WinTAK (Windows)
-- **You get:** live positions, team chat, shared markers, routes and photos,
+- **You get:** live positions, encrypted team chat, a push-to-talk **team radio**
+  (voice channels locked to your team), shared markers, routes and photos,
   emergency alerts, a web map in your browser, and satellite + topo maps
   (downloadable for offline use) already loaded on every device.
 - **Built on:** [OpenTAKServer](https://github.com/brian7704/OpenTAKServer),
@@ -27,7 +28,7 @@ certificates, ports or server settings on anyone's phone.
 ## Quick start
 
 **1. Get a server.** A $5–12/month cloud server (Ubuntu 24.04, 2 GB+ RAM) is the
-easiest. A Raspberry Pi 4/5 or old PC at home also works.
+easiest. A Raspberry Pi 4/5 (2 GB+) or old PC at home also works.
 [Help picking one →](docs/1-get-a-server.md)
 
 **2. Install.** SSH into the server as a normal user with sudo (not root) and run:
@@ -39,8 +40,9 @@ cd ATAK-CX
 ```
 
 It asks for a team name and the server's address, installs OpenTAKServer,
-sets a strong admin password, turns on a firewall, gets an HTTPS certificate
-(if you use a domain name) and schedules nightly backups. It takes about 15 minutes.
+sets a strong admin password, turns on a firewall, sets up the team radio,
+gets an HTTPS certificate (if you use a domain name) and schedules nightly
+backups. It takes about 15–30 minutes (longer on a Raspberry Pi).
 
 > If this repo is private, clone it on the server with a
 > [GitHub token](https://github.com/settings/tokens) or make it public.
@@ -77,14 +79,17 @@ The web map and admin panel are at `https://your-server/` (login in `~/takcx/adm
 1. [Get a server](docs/1-get-a-server.md): cloud vs. home, free domain names, ports
 2. [Add buddies](docs/2-add-buddies.md): colors, roles, sharing, lost phones
 3. [Maps, offline use and radios](docs/3-maps-offline-radio.md): offline maps, no-server mode, Meshtastic, ham radio rules
-4. [Troubleshooting](docs/troubleshooting.md)
-5. [Backups, restore and upgrades](docs/maintenance.md)
+4. [Team radio](docs/4-radio.md): push-to-talk voice channels
+5. [Plugins and extras](docs/5-plugins.md): push plugins to everyone, aircraft on the map, live video
+6. [Troubleshooting](docs/troubleshooting.md)
+7. [Backups, restore and upgrades](docs/maintenance.md)
 
 ## What's in this repo
 
 ```
 setup/install-server.sh   one-command server install
 setup/enable-https.sh     free Let's Encrypt certificate (run by the installer)
+setup/enable-radio.sh     team radio: Mumble locked to takcx accounts (run by the installer)
 setup/backup.sh           nightly backup of certificates, database and packages
 takcx/takcx.py            the `takcx` command
 maps/*.xml                map sources bundled into every package (add your own)

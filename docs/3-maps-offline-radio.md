@@ -88,14 +88,15 @@ carry it over ham bands.** Meshtastic's licensed ("ham") mode turns encryption o
 and lets you run more power, and it's fine for the unencrypted mesh features. On
 unlicensed Meshtastic (the default), encryption is allowed and on.
 
-## Voice
+## Team radio and chat
 
-If you said yes to Mumble during install, you have push-to-talk voice on the
-server: **Mumla** (Android) or **Mumble** (iPhone/PC), server = your server
-address, port 64738. To make it use takcx logins (so disabled people can't get
-in), set `OTS_ENABLE_MUMBLE_AUTHENTICATION: true` in `~/ots/config.yml` and
-restart OpenTAKServer. See the
-[OpenTAKServer Mumble docs](https://docs.opentakserver.io/mumble.html).
+**Chat** is built into ATAK, iTAK and WinTAK, so there's nothing to set up. It goes
+through your server, encrypted: "All Chat Rooms" for everyone, a room per team
+color, or one-to-one by tapping someone on the map. See each buddy's welcome page.
+
+**Radio** is push-to-talk voice on a Mumble server, set up by
+`setup/enable-radio.sh` (the installer offers it). See
+[Team radio](4-radio.md) for how it works and how to use it.
 
 ## Handy built-in ATAK tools
 

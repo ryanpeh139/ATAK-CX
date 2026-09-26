@@ -130,8 +130,8 @@ you two questions:
   ${bold}Install ZeroTier?${reset}      Answer ${bold}n${reset} on a cloud server.
                           Answer ${bold}y${reset} on a home server if you can't port-forward
                           (see docs/1-get-a-server.md first).
-  ${bold}Install Mumble Server?${reset} Answer ${bold}y${reset} if you want push-to-talk voice chat
-                          (Mumla on Android, Mumble on iPhone/PC), otherwise n.
+  ${bold}Install Mumble Server?${reset} Answer ${bold}n${reset}. If you want the team radio, this
+                          script sets it up properly (locked to your accounts) afterwards.
 
 EOF
   read -r -p "Press Enter to start..." < /dev/tty || true
@@ -196,6 +196,19 @@ else
 fi
 note "If your cloud provider also has a firewall (AWS, Oracle, Google...), open the same ports there."
 
+# --------------------------------------------------------------------------- radio
+step "Team radio"
+if [[ ${RADIO_ENABLED:-no} == yes ]]; then
+  echo "Already set up. Re-run setup/enable-radio.sh after changing radio settings."
+else
+  echo "Push-to-talk voice channels (Mumble) using the same logins as the map."
+  if yes_no "Set up the team radio?" Y; then
+    "$REPO_DIR/setup/enable-radio.sh" || note "Radio setup failed; see above. You can re-run setup/enable-radio.sh"
+    # shellcheck disable=SC1090
+    . "$TEAM_CONF"
+  fi
+fi
+
 # --------------------------------------------------------------------------- HTTPS
 if ! is_ip "$SERVER_ADDRESS" && [[ ${HTTPS_ENABLED:-no} != yes ]]; then
   step "HTTPS (Let's Encrypt)"
@@ -221,6 +234,7 @@ step "All set!"
 cat <<EOF
 Web map & admin:  https://$SERVER_ADDRESS/
 Admin login:      see $TAKCX_HOME/admin.conf
+Team radio:       $( [[ ${RADIO_ENABLED:-no} == yes ]] && echo "$SERVER_ADDRESS port 64738 (Mumla / Mumble apps)" || echo "off (turn on: setup/enable-radio.sh)" )
 
 Add your first buddy (and yourself!):
   ${bold}takcx add yourname --role "Team Lead" --share${reset}

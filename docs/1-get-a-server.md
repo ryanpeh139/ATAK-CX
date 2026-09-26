@@ -83,7 +83,7 @@ Any domain you own works the same way: create an **A record** pointing at the se
 | 8089 | TAK apps (encrypted) | Yes |
 | 8443 | TAK data packages / API (client certificate required) | Yes |
 | 8446 | Certificate enrollment | Yes |
-| 64738 | Mumble voice (only if you installed it) | Optional |
+| 64738 (TCP+UDP) | Team radio (if you turned it on) | Optional |
 | 8883 | Meshtastic gateway MQTT (see [radio guide](3-maps-offline-radio.md)) | Optional |
 | 8080, 8088 | OpenTAKServer's **unencrypted** ports | **No**, keep closed |
 

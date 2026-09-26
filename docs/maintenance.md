@@ -58,6 +58,7 @@ scp 'tak@your-server:takcx-backups/*.tar.gz' ~/tak-backups/
 
 Everyone's existing packages keep working because the certificate authority is the same.
 Share links aren't part of the backup; run `takcx share NAME` again for any you still need.
+If you use the team radio, run `./setup/enable-radio.sh` once more afterwards to relink it.
 
 ## Upgrading OpenTAKServer
 

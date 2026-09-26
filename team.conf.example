@@ -30,3 +30,9 @@ COORD_FORMAT=""
 
 # Bundle the map sources in maps/ into every connection package.
 INCLUDE_MAPS="yes"
+
+# Team radio (push-to-talk voice over Mumble), set up by setup/enable-radio.sh.
+# Everyone logs in with their takcx username and password.
+RADIO_ENABLED="no"
+# Channels, comma-separated. People start in the first one.
+RADIO_CHANNELS="Main,Team 1,Team 2,Command"

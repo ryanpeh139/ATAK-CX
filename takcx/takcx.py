@@ -28,6 +28,7 @@ import socket
 import string
 import subprocess
 import sys
+import urllib.parse
 import urllib.request
 import uuid
 import zipfile
@@ -461,6 +462,10 @@ PAGE = string.Template("""<!doctype html>
     </ol>
   </div>
 
+  $chat_card
+
+  $radio_card
+
   $maps_card
 
   <div class="card">
@@ -504,17 +509,61 @@ def onboarding_page(team, username, profile, files):
             '<b>Maps &amp; Favorites</b>, pick a map, tap the download button, draw a box around '
             'the area and choose how much detail you want.</p>'
             f'<a class="btn alt" href="{h(files["maps"])}" download>Maps only ({h(files["maps"])})</a></div>')
+    radio = team.get("RADIO_ENABLED", "no").lower() == "yes"
+    password = profile.get("password") if profile.get("show_web_login") else None
     web_login = ""
-    if profile.get("show_web_login") and profile.get("password"):
+    if password:
         web_login = (f'<dt>Web map</dt><dd><a href="https://{h(team["SERVER_ADDRESS"])}/">'
                      f'https://{h(team["SERVER_ADDRESS"])}/</a></dd>'
                      f'<dt>Username</dt><dd>{h(username)}</dd>'
-                     f'<dt>Password</dt><dd>{h(profile["password"])}</dd>')
+                     f'<dt>Password</dt><dd>{h(password)}'
+                     f'{" (web map and radio)" if radio else ""}</dd>')
     return PAGE.substitute(
         team=h(team["TEAM_NAME"]), callsign=h(profile["callsign"]), color=h(profile["color"]),
         role=h(profile["role"]), server=h(team["SERVER_ADDRESS"]),
         atak_zip=h(files["atak"]), itak_zip=h(files["itak"]),
-        maps_card=maps_card, web_login=web_login)
+        maps_card=maps_card, web_login=web_login, chat_card=CHAT_CARD,
+        radio_card=radio_card(team, username, password) if radio else "")
+
+
+CHAT_CARD = """<div class="card">
+    <h2>Team chat</h2>
+    <p>Chat is built into the app. It goes through the team's own server, encrypted.</p>
+    <ul>
+      <li><b>ATAK / WinTAK:</b> tap the chat icon (speech bubbles), or <b>&#9776; &rarr; Chat</b>.
+          <b>All Chat Rooms</b> reaches everyone, your team color's room reaches your team,
+          or tap someone on the map to message just them.</li>
+      <li><b>iTAK:</b> tap <b>Chat</b>.</li>
+      <li>You can also send photos, markers and routes to people from the map.</li>
+    </ul>
+  </div>"""
+
+
+def radio_card(team, username, password):
+    h = html.escape
+    server = team["SERVER_ADDRESS"]
+    channels = [c.strip() for c in team.get("RADIO_CHANNELS", "Main").split(",") if c.strip()]
+    title = urllib.parse.quote(f"{team['TEAM_NAME']} Radio")
+    login = urllib.parse.quote(username) + (f":{urllib.parse.quote(password)}" if password else "")
+    link = f"mumble://{login}@{server}:64738/?title={title}&version=1.2.0"
+    pw_hint = "the password below" if password else "your password (ask whoever sent this page)"
+    return f"""<div class="card">
+    <h2>Team radio</h2>
+    <p>Push-to-talk voice channels, like walkie-talkies over the internet. Only the team can get in.</p>
+    <ol>
+      <li>Install <a href="https://play.google.com/store/apps/details?id=se.lublin.mumla">Mumla</a>
+          (Android), or <a href="https://www.mumble.info/downloads/">Mumble</a> (Windows/Mac).
+          On iPhone, search the App Store for <b>Mumble</b>.</li>
+      <li><a class="btn" href="{h(link)}">Open the radio</a><br>
+          If that doesn't open the app, add a server by hand: address <b>{h(server)}</b>,
+          port <b>64738</b>, username <b>{h(username)}</b>, and {pw_hint}.</li>
+      <li>The first time, the app asks about the server's certificate. Tap <b>Accept</b>.</li>
+      <li>Switch to push-to-talk. In Mumla: <b>Settings &rarr; Audio &rarr; Transmit mode &rarr;
+          Push to talk</b>. Hold the big button to talk.</li>
+      <li>Tap a channel to switch. Everyone in the same channel hears you. Channels:
+          <b>{h(", ".join(channels))}</b>.</li>
+    </ol>
+  </div>"""
 
 
 # --------------------------------------------------------------------------- helpers
@@ -642,6 +691,25 @@ def cmd_list(args):
     print("\n* = administrator")
 
 
+def radio_enabled():
+    team = read_shell_conf(os.path.join(TAKCX_HOME, "team.conf"))
+    return team.get("RADIO_ENABLED", "no").lower() == "yes"
+
+
+def radio_link_state():
+    """True if Mumble's newest authenticator event is OpenTAKServer attaching, False if
+    it was removed or failed since, None if the log can't be read."""
+    log = ""
+    for cmd in (["sudo", "-n", "journalctl", "-u", "mumble-server", "-n", "300", "--no-pager"],
+                ["sudo", "-n", "tail", "-n", "300", "/var/log/mumble-server/mumble-server.log"]):
+        try:
+            log += subprocess.run(cmd, capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    events = re.findall(r"(Set Ice Authenticator|Removed Ice Authenticator)", log)
+    return events[-1].startswith("Set") if events else None
+
+
 def kick_connections(args):
     """OTS only checks accounts when a device connects, so restart the TAK listeners
     to drop live sessions. Everyone else's app reconnects on its own within seconds."""
@@ -649,8 +717,12 @@ def kick_connections(args):
         print("Their current connection stays up until their app reconnects.")
         return
     print("Dropping live connections so it takes effect now (others reconnect automatically)...")
-    if subprocess.call(["sudo", "systemctl", "restart", "eud_handler_ssl", "eud_handler"]) != 0:
-        print("Couldn't restart the listeners. Run: sudo systemctl restart eud_handler_ssl")
+    services = ["eud_handler_ssl", "eud_handler"]
+    if radio_enabled():
+        # Also restarts OpenTAKServer, which re-links radio logins (see setup/enable-radio.sh).
+        services.append("mumble-server")
+    if subprocess.call(["sudo", "systemctl", "restart", *services]) != 0:
+        print(f"Couldn't restart them. Run: sudo systemctl restart {' '.join(services)}")
 
 
 def cmd_disable(args):
@@ -756,8 +828,9 @@ def cmd_doctor(args):
         ok = ok and good
         print(f"  [{'ok' if good else '!!'}] {label}" + ("" if good or not hint else f"\n       -> {hint}"))
 
+    radio = radio_enabled()
     print("Services")
-    for svc in SERVICES:
+    for svc in SERVICES + (["mumble-server"] if radio else []):
         state = subprocess.run(["systemctl", "is-active", svc], capture_output=True,
                                text=True).stdout.strip() if shutil.which("systemctl") else "unknown"
         report(state == "active", f"{svc}: {state or 'not running'}", f"sudo systemctl restart {svc}; "
@@ -803,20 +876,32 @@ def cmd_doctor(args):
         print("  [--] couldn't look up public IP (no internet?)")
     if shutil.which("ss"):
         listening = subprocess.run(["ss", "-ltnH"], capture_output=True, text=True).stdout
-        for port, what, svc in (("443", "web map / share links", "nginx"),
-                                ("8089", "TAK clients (TLS)", "eud_handler_ssl"),
-                                ("8443", "TAK API (data packages)", "nginx"),
-                                ("8446", "certificate enrollment", "nginx")):
+        ports = [("443", "web map / share links", "nginx"),
+                 ("8089", "TAK clients (TLS)", "eud_handler_ssl"),
+                 ("8443", "TAK API (data packages)", "nginx"),
+                 ("8446", "certificate enrollment", "nginx")]
+        if radio:
+            ports.append(("64738", "team radio", "mumble-server"))
+        for port, what, svc in ports:
             report(f":{port} " in listening, f"port {port} listening ({what})",
                    f"sudo systemctl restart {svc}")
     if shutil.which("ufw"):
         status = subprocess.run(["sudo", "-n", "ufw", "status"], capture_output=True,
                                 text=True).stdout
         if "Status: active" in status:
-            for port in ("8089", "8443", "8446"):
-                report(port in status, f"firewall allows {port}", f"sudo ufw allow {port}/tcp")
+            for port in ("8089", "8443", "8446") + (("64738",) if radio else ()):
+                report(port in status, f"firewall allows {port}", f"sudo ufw allow {port}")
+    if radio:
+        print("Radio")
+        linked = radio_link_state()
+        if linked is None:
+            print("  [--] couldn't read Mumble's log to check the login link")
+        else:
+            report(linked, "radio logins linked to takcx accounts",
+                   "nobody can join the radio until this is fixed: sudo systemctl restart mumble-server")
     print("\nRemember: a cloud provider firewall or home router also has to let ports\n"
-          "443, 8089, 8443 and 8446 through. See docs/troubleshooting.md.")
+          "443, 8089, 8443 and 8446" + (" and 64738 (TCP+UDP)" if radio else "") +
+          " through. See docs/troubleshooting.md.")
     print("\nAll good." if ok else "\nSome checks failed; see the hints above.")
     return 0 if ok else 1
 
