@@ -69,6 +69,22 @@ Logs are in `~/ots/logs/`. The installer log is `~/ots_installer.log`.
 Someone changed the admin password in the web UI. Put the new one in
 `~/takcx/admin.conf` (`OTS_ADMIN_PASSWORD="..."`).
 
+## Aircraft don't show up
+
+- `takcx doctor` should say "aircraft updates running". If not: `takcx aircraft on`.
+- Buddies need to be in the aircraft group: `takcx aircraft sync`, then they
+  toggle the server connection off/on in ATAK once.
+- Nothing flying nearby? Try a bigger area: `takcx aircraft on --radius 150`.
+
+## Drone or camera video doesn't work
+
+- `takcx doctor` should show `mediamtx` active and ports 1935 and 8554 listening.
+- Home server: 1935/tcp, 8554/tcp and 8189/udp must be forwarded on the router.
+- DJI Fly says it can't connect: re-copy the address from the drone's page
+  (`takcx share drone1`); the phone/controller needs internet while streaming.
+- ATAK shows the stream but it won't play: edit the stream in Video Player and
+  enter your takcx username and password.
+
 ## Still stuck
 
 OpenTAKServer has good [docs](https://docs.opentakserver.io) and an active

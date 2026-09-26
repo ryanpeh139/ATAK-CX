@@ -6,9 +6,10 @@ certificates, ports or server settings on anyone's phone.
 
 - **Works with:** ATAK (Android), iTAK (iPhone/iPad), WinTAK (Windows)
 - **You get:** live positions, encrypted team chat, a push-to-talk **team radio**
-  (voice channels locked to your team), shared markers, routes and photos,
-  emergency alerts, a web map in your browser, and satellite + topo maps
-  (downloadable for offline use) already loaded on every device.
+  (voice channels locked to your team), **live drone and camera video**, **live
+  aircraft** on the map, plugins pushed to everyone automatically, shared
+  markers, routes and photos, emergency alerts, a web map in your browser, and
+  satellite + topo maps (downloadable for offline use) already on every device.
 - **Built on:** [OpenTAKServer](https://github.com/brian7704/OpenTAKServer),
   a free, open-source TAK server. The apps are the standard free TAK apps;
   what ATAK-CX customizes is the setup: your team name, callsigns, team colors,
@@ -26,6 +27,9 @@ certificates, ports or server settings on anyone's phone.
 ```
 
 ## Quick start
+
+> **Setting up a Raspberry Pi at home? Follow the step-by-step
+> [install guide](docs/INSTALL.md).** It covers everything below in more detail.
 
 **1. Get a server.** A $5–12/month cloud server (Ubuntu 24.04, 2 GB+ RAM) is the
 easiest. A Raspberry Pi 4/5 (2 GB+) or old PC at home also works.
@@ -66,16 +70,20 @@ It opens a page with the right download and steps for their device.
 | `takcx add NAME [--callsign X] [--color C] [--role R] [--share]` | Add someone |
 | `takcx list` | Everyone, and whether they're enabled |
 | `takcx share NAME` / `takcx unshare NAME` | Publish or take down their download link |
-| `takcx disable NAME` / `takcx enable NAME` | Lock someone out (lost phone?) or let them back in |
+| `takcx disable NAME` / `takcx enable NAME` | Lock someone out of map, radio, video and web (lost phone?) or let them back in |
 | `takcx remove NAME` | Delete someone for good |
 | `takcx rebuild --all` | Remake everyone's packages after editing `~/takcx/team.conf` or `maps/` |
 | `takcx maps` | A maps-only package: no login in it, safe to share with anyone |
+| `takcx add-drone drone1 --share` | Login + stream address for a DJI drone (DJI Fly → RTMP) |
+| `takcx aircraft on --near "Town"` | Live planes and helicopters on everyone's map |
+| `takcx plugin upload FILE.apk` | Push an ATAK plugin to everyone's phone |
 | `takcx doctor` | Check that everything is running and reachable |
 
 The web map and admin panel are at `https://your-server/` (login in `~/takcx/admin.conf`).
 
 ## Guides
 
+0. **[Install guide](docs/INSTALL.md)**: blank Raspberry Pi → team on the map, step by step
 1. [Get a server](docs/1-get-a-server.md): cloud vs. home, free domain names, ports
 2. [Add buddies](docs/2-add-buddies.md): colors, roles, sharing, lost phones
 3. [Maps, offline use and radios](docs/3-maps-offline-radio.md): offline maps, no-server mode, Meshtastic, ham radio rules
@@ -91,6 +99,8 @@ The web map and admin panel are at `https://your-server/` (login in `~/takcx/adm
 setup/install-server.sh   one-command server install
 setup/enable-https.sh     free Let's Encrypt certificate (run by the installer)
 setup/enable-radio.sh     team radio: Mumble locked to takcx accounts (run by the installer)
+setup/enable-video.sh     live video for drones and cameras (run by the installer)
+setup/duckdns.sh          keep a free DuckDNS name pointed at a home server
 setup/backup.sh           nightly backup of certificates, database and packages
 takcx/takcx.py            the `takcx` command
 maps/*.xml                map sources bundled into every package (add your own)

@@ -12,6 +12,9 @@ Only uses the Python standard library.
   takcx share bob / unshare bob  publish or take down bob's download link
   takcx rebuild --all            rebuild packages after editing team.conf or maps/
   takcx maps                     build a maps-only package anyone can import
+  takcx add-drone drone1         a login + stream address for a DJI drone (DJI Fly app)
+  takcx aircraft on --near "Denver, CO"   live aircraft on everyone's map
+  takcx plugin upload FILE.apk   push an ATAK plugin to everyone's phone
   takcx doctor                   check that everything is running
 """
 
@@ -28,6 +31,7 @@ import socket
 import string
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 import uuid
@@ -42,6 +46,8 @@ BUDDIES_DIR = os.path.join(TAKCX_HOME, "buddies")
 OTS_DATA_FOLDER = os.environ.get("OTS_DATA_FOLDER", os.path.expanduser("~/ots"))
 OTS_API = os.environ.get("OTS_API", "127.0.0.1:8081")
 WEB_ROOT = os.environ.get("TAKCX_WEB_ROOT", "/var/www/html/opentakserver")
+OTS_PYTHON = os.environ.get("OTS_PYTHON", os.path.expanduser("~/.opentakserver_venv/bin/python"))
+ADSB_API_URL = "https://api.adsb.lol/v2/point"  # free, same format as OpenTAKServer's default
 
 TEAM_COLORS = ["White", "Yellow", "Orange", "Magenta", "Red", "Maroon", "Purple",
                "Dark Blue", "Blue", "Cyan", "Teal", "Green", "Dark Green", "Brown"]
@@ -75,6 +81,55 @@ def read_shell_conf(path):
                 value = value[1:-1]
             conf[m.group(1)] = value
     return conf
+
+
+def write_shell_conf_value(path, key, value):
+    lines = open(path).read().splitlines() if os.path.exists(path) else []
+    new_line = f'{key}="{value}"'
+    for i, line in enumerate(lines):
+        if re.match(rf"^\s*{key}=", line):
+            lines[i] = new_line
+            break
+    else:
+        lines.append(new_line)
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def team_flag(name):
+    team = read_shell_conf(os.path.join(TAKCX_HOME, "team.conf"))
+    return team.get(name, "no").lower() == "yes"
+
+
+def set_ots_config(values):
+    """Set top-level scalar keys in OpenTAKServer's config.yml. Returns True if anything changed."""
+    path = os.path.join(OTS_DATA_FOLDER, "config.yml")
+    text = open(path).read()
+    new = text
+    for key, value in values.items():
+        line = f"{key}: {value}"
+        if re.search(rf"^{key}:.*$", new, flags=re.M):
+            new = re.sub(rf"^{key}:.*$", lambda _m: line, new, flags=re.M)
+        else:
+            new = new.rstrip("\n") + "\n" + line + "\n"
+    if new != text:
+        with open(path, "w") as f:
+            f.write(new)
+    return new != text
+
+
+def restart_ots():
+    """Restart OpenTAKServer so it rereads config.yml, then wait until it answers."""
+    print("Restarting OpenTAKServer (TAK connections blip and reconnect)...")
+    if subprocess.call(["sudo", "systemctl", "restart", "opentakserver"]) != 0:
+        raise TakcxError("Couldn't restart it. Run: sudo systemctl restart opentakserver")
+    for _ in range(60):
+        try:
+            with urllib.request.urlopen(f"http://{OTS_API}/api/health", timeout=3):
+                return
+        except OSError:
+            time.sleep(3)
+    raise TakcxError("OpenTAKServer didn't come back. Check ~/ots/logs/opentakserver.log")
 
 
 def read_ots_config():
@@ -130,18 +185,20 @@ class OTS:
         self.host_header = host_header
         self.cookies = {}
 
-    def request(self, method, path, body=None):
-        conn = http.client.HTTPConnection(OTS_API, timeout=60)
+    def request(self, method, path, body=None, raw=None, content_type=None):
+        conn = http.client.HTTPConnection(OTS_API, timeout=300)
         headers = {"Host": self.host_header, "Accept": "application/json"}
-        if body is not None:
+        if raw is not None:
+            headers["Content-Type"] = content_type
+        elif body is not None:
             headers["Content-Type"] = "application/json"
         if self.cookies:
             headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in self.cookies.items())
         if "XSRF-TOKEN" in self.cookies:
             headers["X-XSRF-Token"] = self.cookies["XSRF-TOKEN"]
         try:
-            conn.request(method, path, body=json.dumps(body) if body is not None else None,
-                         headers=headers)
+            payload = raw if raw is not None else (json.dumps(body) if body is not None else None)
+            conn.request(method, path, body=payload, headers=headers)
             resp = conn.getresponse()
         except OSError as e:
             raise TakcxError(f"Can't reach OpenTAKServer at {OTS_API} ({e}). "
@@ -180,6 +237,24 @@ class OTS:
             raise TakcxError(f"{path}: {self.error_text(data)}")
         return data
 
+    def upload(self, path, fields, file_field, file_path):
+        boundary = "takcx" + secrets.token_hex(12)
+        parts = []
+        for name, value in fields.items():
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n'
+                         f"{value}\r\n".encode())
+        filename = os.path.basename(file_path)
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; '
+                     f'filename="{filename}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode())
+        with open(file_path, "rb") as f:
+            parts.append(f.read())
+        parts.append(f"\r\n--{boundary}--\r\n".encode())
+        status, data = self.request("POST", path, raw=b"".join(parts),
+                                    content_type=f"multipart/form-data; boundary={boundary}")
+        if status != 200 or (isinstance(data, dict) and data.get("success") is False):
+            raise TakcxError(f"{path}: {data.get('errors') or self.error_text(data)}")
+        return data
+
     def users(self):
         users, page = [], 1
         while True:
@@ -199,6 +274,18 @@ def connect(team=None):
     ots = OTS(team["SERVER_ADDRESS"])
     ots.login(admin["OTS_ADMIN_USER"], admin["OTS_ADMIN_PASSWORD"])
     return ots
+
+
+def join_aircraft_groups(ots, username):
+    """Aircraft are sent to OpenTAKServer's "ADS-B" group. Joining any group stops a
+    user getting the default (__ANON__) team traffic, so join both."""
+    for direction, groups in (("OUT", ["__ANON__", "ADS-B"]), ("IN", ["__ANON__"])):
+        try:
+            ots.call("PUT", "/api/users/groups",
+                     {"username": username, "direction": direction, "groups": groups})
+        except TakcxError as e:
+            if "already" not in str(e).lower():
+                raise
 
 
 # --------------------------------------------------------------------------- packages
@@ -466,6 +553,8 @@ PAGE = string.Template("""<!doctype html>
 
   $radio_card
 
+  $video_card
+
   $maps_card
 
   <div class="card">
@@ -523,6 +612,7 @@ def onboarding_page(team, username, profile, files):
         role=h(profile["role"]), server=h(team["SERVER_ADDRESS"]),
         atak_zip=h(files["atak"]), itak_zip=h(files["itak"]),
         maps_card=maps_card, web_login=web_login, chat_card=CHAT_CARD,
+        video_card=VIDEO_CARD if team.get("VIDEO_ENABLED", "no").lower() == "yes" else "",
         radio_card=radio_card(team, username, password) if radio else "")
 
 
@@ -535,6 +625,20 @@ CHAT_CARD = """<div class="card">
           or tap someone on the map to message just them.</li>
       <li><b>iTAK:</b> tap <b>Chat</b>.</li>
       <li>You can also send photos, markers and routes to people from the map.</li>
+    </ul>
+  </div>"""
+
+
+VIDEO_CARD = """<div class="card">
+    <h2>Live video</h2>
+    <p>Watch the team's drone and camera streams.</p>
+    <ul>
+      <li><b>ATAK:</b> open <b>&#9776; &rarr; Video Player</b>, tap the download (cloud) button to get
+          the list from the server, pick a stream and tap <b>OK</b>. Then edit that stream and enter
+          your username and password (below).</li>
+      <li><b>Any phone or computer:</b> open the web map, log in, go to <b>Video Streams</b> and tap
+          <b>Watch</b>.</li>
+      <li><b>Stream your own camera:</b> on the web map, <b>Video Streams &rarr; Start Streaming</b>.</li>
     </ul>
   </div>"""
 
@@ -629,6 +733,8 @@ def cmd_add(args):
                                         "confirm_password": password, "roles": roles})
     print("Issuing certificate...")
     ots.call("POST", "/api/certificate", {"username": username})
+    if team_flag("AIRCRAFT_ENABLED"):
+        join_aircraft_groups(ots, username)
 
     profile["password"] = password
     out, files = build_packages(team, ots_conf, username, profile)
@@ -661,6 +767,10 @@ def cmd_rebuild(args):
         if profile is None:
             print(f"Skipping {username}: no profile.json (was it added with takcx?)")
             continue
+        if profile.get("type") == "drone":
+            write_drone_page(team, username, profile)
+            print(f"Rebuilt {username} (drone)")
+            continue
         if args.color:
             profile["color"] = pick(args.color, TEAM_COLORS, "team color")
         if args.role:
@@ -686,6 +796,8 @@ def cmd_list(args):
         roles = [r.get("name") for r in u.get("roles", [])]
         status = "enabled" if u.get("active") else "DISABLED"
         callsign = profile.get("callsign", "-") + (" *" if "administrator" in roles else "")
+        if profile.get("type") == "drone":
+            callsign = "(drone)"
         print(f"{u['username']:<20} {status:<9} {callsign:<16} {'yes' if shared else '-':<7} "
               f"{u.get('current_login_at') or '-'}")
     print("\n* = administrator")
@@ -729,16 +841,28 @@ def cmd_disable(args):
     ots = connect()
     username = check_username(args.name)
     ots.call("POST", "/api/user/deactivate", {"username": username})
+    # OpenTAKServer's video login ignores "disabled", so also swap in a password
+    # nobody knows. `takcx enable` puts their real one back.
+    ots.call("POST", "/api/user/password/reset",
+             {"username": username, "new_password": new_password(32)})
     unshare(username, quiet=True)
     kick_connections(args)
-    print(f"{username} is disabled and can't connect. Undo with: takcx enable {username}")
+    print(f"{username} is disabled: no map, radio, video or web login. "
+          f"Undo with: takcx enable {username}")
 
 
 def cmd_enable(args):
     ots = connect()
     username = check_username(args.name)
     ots.call("POST", "/api/user/activate", {"username": username})
-    print(f"{username} is enabled again.")
+    profile = load_profile(username) or {}
+    if profile.get("password"):
+        ots.call("POST", "/api/user/password/reset",
+                 {"username": username, "new_password": profile["password"]})
+        print(f"{username} is enabled again, with their old password.")
+    else:
+        print(f"{username} is enabled again, but takcx doesn't know their old password. "
+              "Set a new one in the web admin (Users) and give it to them.")
 
 
 def cmd_remove(args):
@@ -754,7 +878,7 @@ def cmd_remove(args):
     unshare(username, quiet=True)
     shutil.rmtree(os.path.join(BUDDIES_DIR, username), ignore_errors=True)
     kick_connections(args)
-    print(f"{username} removed. Their certificate no longer lets them in.")
+    print(f"{username} removed. They can no longer log in or connect.")
 
 
 def publish(username, token):
@@ -803,6 +927,109 @@ def unshare(username, quiet=False):
         print(f"Link for {username} taken down.")
 
 
+STYLE = PAGE.template.split("<style>")[1].split("</style>")[0]
+
+DRONE_PAGE = string.Template("""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Drone video setup</title>
+<style>$style
+  textarea { width:100%; font:14px/1.4 ui-monospace, monospace; padding:10px; border-radius:8px;
+             border:1px solid var(--line); background:var(--bg); color:var(--ink); resize:none; }
+  button.btn { border:0; cursor:pointer; font-size:1rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Drone video: $name</h1>
+  <p class="sub">Streams this drone's camera to $team. Open this page on the phone or controller
+  that runs DJI Fly.</p>
+
+  <div class="card mine">
+    <h2>1. Copy the stream address</h2>
+    <textarea id="url" rows="4" readonly>$url</textarea>
+    <button class="btn" onclick="copyUrl(this)">Copy address</button>
+  </div>
+
+  <div class="card">
+    <h2>2. Start streaming in DJI Fly</h2>
+    <ol>
+      <li>Power on the drone and open the camera view in DJI Fly.</li>
+      <li>Tap <b>&middot;&middot;&middot;</b> (top right) &rarr; <b>Transmission</b> &rarr;
+          <b>Live Streaming Platforms</b> &rarr; <b>RTMP</b>.</li>
+      <li>Paste the address and start the stream.</li>
+    </ol>
+    <p>The phone or controller needs mobile data or Wi-Fi while streaming. Controllers with a
+    built-in screen (DJI RC, RC 2) only offer RTMP on some drones, after a firmware update.</p>
+  </div>
+
+  <div class="card">
+    <h2>3. The team watches</h2>
+    <p>The stream appears as <b>$name</b>: in ATAK under <b>Video Player</b> (tap the download
+    button, then enter your own username and password on the stream), and on the web map under
+    <b>Video Streams</b>.</p>
+  </div>
+
+  <p class="sub">This address includes the drone's own login, and RTMP isn't encrypted, so keep it
+  private. If it leaks, the server admin runs <code>takcx disable $name</code>.</p>
+</main>
+<script>
+  function copyUrl(b) {
+    var t = document.getElementById("url"); t.select();
+    (navigator.clipboard ? navigator.clipboard.writeText(t.value) : Promise.reject())
+      .catch(function () { document.execCommand("copy"); });
+    b.textContent = "Copied";
+  }
+</script>
+</body>
+</html>
+""")
+
+
+def drone_url(team, username, password):
+    return (f"rtmp://{team['SERVER_ADDRESS']}:1935/{username}"
+            f"?user={urllib.parse.quote(username)}&pass={urllib.parse.quote(password)}")
+
+
+def write_drone_page(team, username, profile):
+    out = os.path.join(BUDDIES_DIR, username)
+    os.makedirs(out, mode=0o700, exist_ok=True)
+    url = drone_url(team, username, profile["password"])
+    with open(os.path.join(out, "index.html"), "w") as f:
+        f.write(DRONE_PAGE.substitute(style=STYLE, name=html.escape(username),
+                                      team=html.escape(team["TEAM_NAME"]), url=html.escape(url)))
+    fd = os.open(os.path.join(out, "profile.json"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(profile, f, indent=2)
+    return url
+
+
+def cmd_add_drone(args):
+    team = load_team()
+    username = check_username(args.name)
+    ots = connect(team)
+    if ots.find_user(username):
+        raise TakcxError(f"{username} already exists. Pick another name, or `takcx remove {username}`.")
+    password = new_password()
+    ots.call("POST", "/api/user/add", {"username": username, "password": password,
+                                        "confirm_password": password, "roles": ["user"]})
+    profile = {"type": "drone", "callsign": username, "password": password,
+               "created": datetime.now().isoformat(timespec="seconds")}
+    url = write_drone_page(team, username, profile)
+    print(f"\nDrone login {username} is ready. Stream address for DJI Fly "
+          f"(Transmission -> Live Streaming Platforms -> RTMP):\n\n  {url}\n")
+    print_qr(url)
+    if not team_flag("VIDEO_ENABLED"):
+        print("Note: live video isn't switched on yet. Run setup/enable-video.sh first.")
+    if args.share:
+        do_share(team, username)
+    else:
+        print(f"Easiest way to get it onto the drone's phone: takcx share {username}")
+
+
 def cmd_share(args):
     do_share(load_team(), check_username(args.name))
 
@@ -820,6 +1047,151 @@ def cmd_maps(args):
           "share with anyone, including people using ATAK without the server.")
 
 
+def geocode(place):
+    """'40.7,-74.0' or a place name (looked up on OpenStreetMap) -> (lat, lon, label)."""
+    m = re.match(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$", place)
+    if m:
+        return float(m.group(1)), float(m.group(2)), place.strip()
+    url = ("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
+           + urllib.parse.quote(place))
+    req = urllib.request.Request(url, headers={"User-Agent": "ATAK-CX takcx (aircraft setup)"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            results = json.load(r)
+    except OSError as e:
+        raise TakcxError(f"Couldn't look up '{place}' ({e}). Give coordinates instead, e.g. 39.74,-104.99")
+    if not results:
+        raise TakcxError(f"Couldn't find '{place}'. Try a nearby town, or coordinates like 39.74,-104.99")
+    return float(results[0]["lat"]), float(results[0]["lon"]), results[0]["display_name"]
+
+
+def cmd_aircraft(args):
+    team = load_team()
+    conf_path = os.path.join(TAKCX_HOME, "team.conf")
+    if args.action == "off":
+        connect(team).call("POST", "/api/scheduler/job/pause", {"job_id": "get_adsb_data"})
+        write_shell_conf_value(conf_path, "AIRCRAFT_ENABLED", "no")
+        print("Aircraft tracking is off.")
+        return
+
+    if args.action == "on":
+        if args.near:
+            lat, lon, label = geocode(args.near)
+        elif team.get("AIRCRAFT_LAT") and team.get("AIRCRAFT_LON"):
+            lat, lon, label = float(team["AIRCRAFT_LAT"]), float(team["AIRCRAFT_LON"]), \
+                team.get("AIRCRAFT_NEAR", "")
+        else:
+            raise TakcxError('Where should it look? e.g. takcx aircraft on --near "Denver, CO"')
+        radius = args.radius or int(team.get("AIRCRAFT_RADIUS_NM") or 50)
+        if not 1 <= radius <= 250:
+            raise TakcxError("--radius is in nautical miles, 1 to 250.")
+        print(f"Tracking aircraft within {radius} nm of {label} ({lat:.4f}, {lon:.4f})")
+        changed = set_ots_config({"OTS_ADSB_LAT": round(lat, 5), "OTS_ADSB_LON": round(lon, 5),
+                                  "OTS_ADSB_RADIUS": radius, "OTS_ADSB_API_URL": ADSB_API_URL})
+        if changed:
+            restart_ots()
+        for key, value in (("AIRCRAFT_ENABLED", "yes"), ("AIRCRAFT_NEAR", label.replace('"', "")),
+                           ("AIRCRAFT_LAT", round(lat, 5)), ("AIRCRAFT_LON", round(lon, 5)),
+                           ("AIRCRAFT_RADIUS_NM", radius)):
+            write_shell_conf_value(conf_path, key, value)
+        ots = connect(team)
+        ots.call("POST", "/api/scheduler/job/modify",
+                 {"job_id": "get_adsb_data", "trigger": "interval", "seconds": 30})
+        ots.call("POST", "/api/scheduler/job/resume", {"job_id": "get_adsb_data"})
+    else:  # sync
+        if not team_flag("AIRCRAFT_ENABLED"):
+            raise TakcxError('Aircraft tracking is off. Turn it on with: takcx aircraft on --near "Town"')
+        ots = connect(team)
+
+    count = 0
+    for user in ots.users():
+        profile = load_profile(user["username"]) or {}
+        if profile.get("type") != "drone":
+            join_aircraft_groups(ots, user["username"])
+            count += 1
+    if args.action == "on":
+        ots.call("POST", "/api/scheduler/job/run", {"job_id": "get_adsb_data"})
+    print(f"Done. {count} accounts will see aircraft (updated every 30 s). Anyone connected "
+          "may need to reconnect once (toggle the server off/on in ATAK) to start seeing them.")
+
+
+def apk_info(path):
+    """Read an APK with OpenTAKServer's own Python (it ships androguard)."""
+    script = (
+        "import sys, logging\n"
+        "logging.disable(logging.CRITICAL)\n"
+        "try:\n"
+        "    from loguru import logger; logger.remove()\n"
+        "except Exception:\n"
+        "    pass\n"
+        "from androguard.core.apk import APK\n"
+        "a = APK(sys.argv[1])\n"
+        "ns = '{http://schemas.android.com/apk/res/android}'\n"
+        "api = ''\n"
+        "for m in a.get_android_manifest_xml().iter('meta-data'):\n"
+        "    if m.get(ns + 'name') == 'plugin-api':\n"
+        "        api = m.get(ns + 'value') or ''\n"
+        "import json\n"
+        "print('TAKCX' + json.dumps({'package': a.get_package(), 'name': a.get_app_name(),\n"
+        "                            'version': a.get_androidversion_name(), 'plugin_api': api}))\n")
+    if not os.path.exists(OTS_PYTHON):
+        return None
+    r = subprocess.run([OTS_PYTHON, "-c", script, path], capture_output=True, text=True)
+    found = [line[5:] for line in r.stdout.splitlines() if line.startswith("TAKCX")]
+    if r.returncode != 0 or not found:
+        last = (r.stderr.strip().splitlines() or ["unknown error"])[-1]
+        raise TakcxError(f"{path} doesn't look like a valid APK ({last[-200:]})")
+    return json.loads(found[-1])
+
+
+def cmd_plugin(args):
+    team = load_team()
+    ots = connect(team)
+    if args.action == "list":
+        data = ots.call("GET", "/api/packages?per_page=100")
+        rows = data.get("results", [])
+        if not rows:
+            print("No plugins on the server yet. Add one with: takcx plugin upload FILE.apk")
+        for pkg in rows:
+            print(f"{pkg.get('name') or pkg.get('package_name')}  v{pkg.get('version')}  "
+                  f"[{pkg.get('package_name')}]  for ATAK {pkg.get('atak_version') or pkg.get('tak_prereq') or 'any'}")
+        return
+
+    if args.action == "remove":
+        if not args.target:
+            raise TakcxError("Which plugin? Give its package name from `takcx plugin list`.")
+        query = "package_name=" + urllib.parse.quote(args.target)
+        if args.atak_version:
+            query += "&atak_version=" + urllib.parse.quote(args.atak_version)
+        ots.call("DELETE", f"/api/packages?{query}")
+        print(f"Removed {args.target}.")
+        return
+
+    if not args.target:
+        raise TakcxError("Which APK? e.g. takcx plugin upload ~/Downloads/plugin.apk")
+    path = os.path.expanduser(args.target)
+    if not path.lower().endswith(".apk") or not os.path.isfile(path):
+        raise TakcxError(f"{args.target} isn't an .apk file.")
+    info = apk_info(path)
+    atak_version = args.atak_version
+    if info:
+        print(f"{info['name']} {info['version']} ({info['package']}), built for {info['plugin_api'] or 'unknown ATAK'}")
+        if not info["plugin_api"]:
+            print("Warning: this doesn't look like an ATAK plugin (no plugin-api tag). Uploading anyway.")
+        m = re.search(r"@(\d+)\.(\d+)\.(\d+)", info["plugin_api"])
+        # ATAK 5.5+ asks the server for plugins matching its own version.
+        if not atak_version and m and (int(m.group(1)), int(m.group(2))) >= (5, 5):
+            atak_version = ".".join(m.groups())
+    fields = {"platform": "Android", "plugin_type": "plugin",
+              "install_on_enrollment": "false", "install_on_connection": "false"}
+    if atak_version:
+        fields["atak_version"] = atak_version
+    print("Uploading...")
+    ots.upload("/api/packages", fields, "apk", path)
+    print(f"Done. Everyone's ATAK{' ' + atak_version if atak_version else ''} offers it the next time "
+          "ATAK starts (or in the Plugins tool, tap sync).")
+
+
 def cmd_doctor(args):
     ok = True
 
@@ -829,8 +1201,9 @@ def cmd_doctor(args):
         print(f"  [{'ok' if good else '!!'}] {label}" + ("" if good or not hint else f"\n       -> {hint}"))
 
     radio = radio_enabled()
+    video = team_flag("VIDEO_ENABLED")
     print("Services")
-    for svc in SERVICES + (["mumble-server"] if radio else []):
+    for svc in SERVICES + (["mumble-server"] if radio else []) + (["mediamtx"] if video else []):
         state = subprocess.run(["systemctl", "is-active", svc], capture_output=True,
                                text=True).stdout.strip() if shutil.which("systemctl") else "unknown"
         report(state == "active", f"{svc}: {state or 'not running'}", f"sudo systemctl restart {svc}; "
@@ -882,6 +1255,8 @@ def cmd_doctor(args):
                  ("8446", "certificate enrollment", "nginx")]
         if radio:
             ports.append(("64738", "team radio", "mumble-server"))
+        if video:
+            ports += [("1935", "drone/RTMP video in", "mediamtx"), ("8554", "video to ATAK (RTSP)", "mediamtx")]
         for port, what, svc in ports:
             report(f":{port} " in listening, f"port {port} listening ({what})",
                    f"sudo systemctl restart {svc}")
@@ -889,7 +1264,8 @@ def cmd_doctor(args):
         status = subprocess.run(["sudo", "-n", "ufw", "status"], capture_output=True,
                                 text=True).stdout
         if "Status: active" in status:
-            for port in ("8089", "8443", "8446") + (("64738",) if radio else ()):
+            for port in (("8089", "8443", "8446") + (("64738",) if radio else ())
+                         + (("1935", "8554") if video else ())):
                 report(port in status, f"firewall allows {port}", f"sudo ufw allow {port}")
     if radio:
         print("Radio")
@@ -899,9 +1275,18 @@ def cmd_doctor(args):
         else:
             report(linked, "radio logins linked to takcx accounts",
                    "nobody can join the radio until this is fixed: sudo systemctl restart mumble-server")
+    if team_flag("AIRCRAFT_ENABLED"):
+        print("Aircraft")
+        try:
+            jobs = connect(team).call("GET", "/api/scheduler/jobs")
+            job = next((j for j in jobs if j.get("id") == "get_adsb_data"), {})
+            report(bool(job.get("next_run_time")), "aircraft updates running",
+                   'takcx aircraft on   (re-activates the job)')
+        except TakcxError as e:
+            report(False, f"couldn't check aircraft job: {e}")
+    extra = (" 64738 (TCP+UDP)" if radio else "") + (" 1935 8554" if video else "")
     print("\nRemember: a cloud provider firewall or home router also has to let ports\n"
-          "443, 8089, 8443 and 8446" + (" and 64738 (TCP+UDP)" if radio else "") +
-          " through. See docs/troubleshooting.md.")
+          "443 8089 8443 8446" + extra + " through. See docs/troubleshooting.md.")
     print("\nAll good." if ok else "\nSome checks failed; see the hints above.")
     return 0 if ok else 1
 
@@ -965,6 +1350,21 @@ def main(argv=None):
     p.add_argument("--no-kick", action="store_true", help="don't drop live connections")
     p.set_defaults(func=cmd_remove)
     sub.add_parser("maps", help="build a maps-only package").set_defaults(func=cmd_maps)
+    p = sub.add_parser("add-drone", help="a login + stream address for a drone (DJI Fly RTMP)")
+    p.add_argument("name", help="e.g. drone1 (this is also the stream's name)")
+    p.add_argument("--share", action="store_true", help="publish a private setup page")
+    p.set_defaults(func=cmd_add_drone)
+    p = sub.add_parser("aircraft", help="live aircraft (ADS-B) on everyone's map")
+    p.add_argument("action", choices=["on", "off", "sync"],
+                   help="on: start (or change area); off: stop; sync: re-add everyone to the aircraft feed")
+    p.add_argument("--near", help='town or "lat,lon" to center on, e.g. "Denver, CO"')
+    p.add_argument("--radius", type=int, help="nautical miles around it, max 250 (default 50)")
+    p.set_defaults(func=cmd_aircraft)
+    p = sub.add_parser("plugin", help="push ATAK plugins to everyone")
+    p.add_argument("action", choices=["upload", "list", "remove"])
+    p.add_argument("target", nargs="?", help="APK file (upload) or package name (remove)")
+    p.add_argument("--atak-version", help="ATAK version it's for, e.g. 5.5.0 (read from the APK if left out)")
+    p.set_defaults(func=cmd_plugin)
     sub.add_parser("doctor", help="check the server").set_defaults(func=cmd_doctor)
     p = sub.add_parser("admin-password", help="set a new random web admin password")
     p.add_argument("--password", help=argparse.SUPPRESS)

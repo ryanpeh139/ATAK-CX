@@ -36,3 +36,9 @@ INCLUDE_MAPS="yes"
 RADIO_ENABLED="no"
 # Channels, comma-separated. People start in the first one.
 RADIO_CHANNELS="Main,Team 1,Team 2,Command"
+
+# Live video (drones, cameras), set up by setup/enable-video.sh.
+VIDEO_ENABLED="no"
+
+# Live aircraft on the map, set up with: takcx aircraft on --near "Town, State"
+AIRCRAFT_ENABLED="no"

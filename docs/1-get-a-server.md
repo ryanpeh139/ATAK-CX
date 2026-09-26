@@ -84,6 +84,7 @@ Any domain you own works the same way: create an **A record** pointing at the se
 | 8443 | TAK data packages / API (client certificate required) | Yes |
 | 8446 | Certificate enrollment | Yes |
 | 64738 (TCP+UDP) | Team radio (if you turned it on) | Optional |
+| 1935 TCP, 8554 TCP, 8189 UDP | Live video: drones in, video to ATAK, video in browsers | Optional |
 | 8883 | Meshtastic gateway MQTT (see [radio guide](3-maps-offline-radio.md)) | Optional |
 | 8080, 8088 | OpenTAKServer's **unencrypted** ports | **No**, keep closed |
 

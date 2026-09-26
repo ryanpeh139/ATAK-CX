@@ -81,7 +81,8 @@ The page walks them through it, but in short:
 ## Lost phone, or someone leaves
 
 ```bash
-takcx disable bob     # locked out right away; undo with: takcx enable bob
+takcx disable bob     # locked out of map, radio, video and web right away
+                      # undo with: takcx enable bob (restores his password)
 takcx remove bob      # gone for good
 ```
 

@@ -209,6 +209,37 @@ else
   fi
 fi
 
+# --------------------------------------------------------------------------- video
+step "Live video (drones, cameras)"
+if [[ ${VIDEO_ENABLED:-no} == yes ]]; then
+  echo "Already on."
+else
+  echo "Stream DJI drones (DJI Fly app), IP cameras or phone cameras to everyone's ATAK and the web map."
+  if yes_no "Turn on live video?" Y; then
+    "$REPO_DIR/setup/enable-video.sh" || note "Video setup failed; see above. You can re-run setup/enable-video.sh"
+    # shellcheck disable=SC1090
+    . "$TEAM_CONF"
+  fi
+fi
+
+# --------------------------------------------------------------------------- aircraft
+step "Aircraft on the map (ADS-B)"
+if [[ ${AIRCRAFT_ENABLED:-no} == yes ]]; then
+  echo "Already on (near ${AIRCRAFT_NEAR:-?}). Change area: takcx aircraft on --near \"Town, State\""
+else
+  echo "Show live planes and helicopters near you on everyone's map (free adsb.lol feed)."
+  if yes_no "Turn on aircraft tracking?" Y; then
+    near="$(ask "Center it on which town, or lat,lon" "")"
+    if [[ -n $near ]]; then
+      takcx aircraft on --near "$near" || note "Aircraft setup failed. Try later: takcx aircraft on --near \"Town, State\""
+      # shellcheck disable=SC1090
+      . "$TEAM_CONF"
+    else
+      note "Skipped. Turn it on later: takcx aircraft on --near \"Town, State\""
+    fi
+  fi
+fi
+
 # --------------------------------------------------------------------------- HTTPS
 if ! is_ip "$SERVER_ADDRESS" && [[ ${HTTPS_ENABLED:-no} != yes ]]; then
   step "HTTPS (Let's Encrypt)"
@@ -235,6 +266,8 @@ cat <<EOF
 Web map & admin:  https://$SERVER_ADDRESS/
 Admin login:      see $TAKCX_HOME/admin.conf
 Team radio:       $( [[ ${RADIO_ENABLED:-no} == yes ]] && echo "$SERVER_ADDRESS port 64738 (Mumla / Mumble apps)" || echo "off (turn on: setup/enable-radio.sh)" )
+Live video:       $( [[ ${VIDEO_ENABLED:-no} == yes ]] && echo "on (drones: takcx add-drone drone1 --share)" || echo "off (turn on: setup/enable-video.sh)" )
+Aircraft:         $( [[ ${AIRCRAFT_ENABLED:-no} == yes ]] && echo "on, near ${AIRCRAFT_NEAR:-?}" || echo "off (turn on: takcx aircraft on --near \"Town\")" )
 
 Add your first buddy (and yourself!):
   ${bold}takcx add yourname --role "Team Lead" --share${reset}
