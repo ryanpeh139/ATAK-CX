@@ -15,6 +15,7 @@ Only uses the Python standard library.
   takcx add-drone drone1         a login + stream address for a DJI drone (DJI Fly app)
   takcx aircraft on --near "Denver, CO"   live aircraft on everyone's map
   takcx plugin upload FILE.apk   push an ATAK plugin to everyone's phone
+  takcx elevation --near "Town"  terrain data for ATAK's line-of-sight and slope tools
   takcx doctor                   check that everything is running
 """
 
@@ -23,6 +24,7 @@ import glob
 import html
 import http.client
 import json
+import math
 import os
 import re
 import secrets
@@ -48,6 +50,9 @@ OTS_API = os.environ.get("OTS_API", "127.0.0.1:8081")
 WEB_ROOT = os.environ.get("TAKCX_WEB_ROOT", "/var/www/html/opentakserver")
 OTS_PYTHON = os.environ.get("OTS_PYTHON", os.path.expanduser("~/.opentakserver_venv/bin/python"))
 ADSB_API_URL = "https://api.adsb.lol/v2/point"  # free, same format as OpenTAKServer's default
+# Copernicus GLO-30: free 30 m worldwide elevation, one cloud-optimized GeoTIFF per 1x1 degree.
+COPERNICUS_DEM = ("https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_{ns}{lat:02d}_00_"
+                  "{ew}{lon:03d}_00_DEM/Copernicus_DSM_COG_10_{ns}{lat:02d}_00_{ew}{lon:03d}_00_DEM.tif")
 
 TEAM_COLORS = ["White", "Yellow", "Orange", "Magenta", "Red", "Maroon", "Purple",
                "Dark Blue", "Blue", "Cyan", "Teal", "Green", "Dark Green", "Brown"]
@@ -579,6 +584,8 @@ PAGE = string.Template("""<!doctype html>
 
   $video_card
 
+  $elevation_card
+
   $maps_card
 
   <div class="card">
@@ -638,6 +645,7 @@ def onboarding_page(team, username, profile, files):
         maps_card=maps_card, web_login=web_login, chat_card=CHAT_CARD,
         video_card=VIDEO_CARD if team.get("VIDEO_ENABLED", "no").lower() == "yes" else "",
         alerts_card=alerts_card(team),
+        elevation_card=elevation_card(team),
         radio_card=radio_card(team, username, password) if radio else "")
 
 
@@ -665,6 +673,23 @@ VIDEO_CARD = """<div class="card">
           <b>Watch</b>.</li>
       <li><b>Stream your own camera:</b> on the web map, <b>Video Streams &rarr; Start Streaming</b>.</li>
     </ul>
+  </div>"""
+
+
+def elevation_card(team):
+    if not team.get("ELEVATION_URL"):
+        return ""
+    h = html.escape
+    return f"""<div class="card">
+    <h2>Elevation data ({h(team.get("ELEVATION_AREA", "our area"))})</h2>
+    <p>Detailed terrain heights so ATAK can show elevation, slope and line of sight
+    ("can I see that ridge from here?"), even offline.</p>
+    <ol>
+      <li>Download it: <br><a class="btn alt" href="{h(team["ELEVATION_URL"])}" download>Elevation data
+          ({h(team.get("ELEVATION_SIZE", ""))})</a></li>
+      <li>In ATAK: <b>&#9776; &rarr; Import &rarr; Local SD</b>, pick the file, and choose
+          <b>Zipped DTED directories</b>. It takes a few minutes.</li>
+    </ol>
   </div>"""
 
 
@@ -1238,6 +1263,105 @@ def cmd_plugin(args):
           "ATAK starts (or in the Plugins tool, tap sync).")
 
 
+def dted_spacing(lat_south, level):
+    """Arc-second spacing (lat, lon) for a DTED cell, per MIL-PRF-89020."""
+    base = {1: 3, 2: 1}[level]
+    edge = max(abs(lat_south), abs(lat_south + 1))
+    lon_factor = 1 if edge <= 50 else 2 if edge <= 70 else 3 if edge <= 75 else 4 if edge <= 80 else 6
+    return base, base * lon_factor
+
+
+def build_dted_cell(lat, lon, level, out_path, work):
+    """Copernicus 1x1 degree tile -> one DTED file. False if it's all ocean (no tile)."""
+    ns, ew = ("N" if lat >= 0 else "S"), ("E" if lon >= 0 else "W")
+    src = "/vsicurl/" + COPERNICUS_DEM.format(ns=ns, lat=abs(lat), ew=ew, lon=abs(lon))
+    lat_sp, lon_sp = dted_spacing(lat, level)
+    rows, cols = 3600 // lat_sp + 1, 3600 // lon_sp + 1
+    hy, hx = lat_sp / 7200, lon_sp / 7200  # DTED posts sit on the cell edges (pixel-is-point)
+    tmp = os.path.join(work, f"cell_{lat}_{lon}.tif")
+    warp = subprocess.run(
+        ["gdalwarp", "-q", "-overwrite", "-t_srs", "EPSG:4326", "-r", "bilinear", "-ot", "Int16",
+         "-dstnodata", "-32767", "-te", str(lon - hx), str(lat - hy), str(lon + 1 + hx), str(lat + 1 + hy),
+         "-ts", str(cols), str(rows), src, tmp],
+        capture_output=True, text=True, env={**os.environ, "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
+                                             "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif"})
+    if warp.returncode != 0:
+        if "404" in warp.stderr or "does not exist" in warp.stderr or "No such file" in warp.stderr:
+            return False
+        raise TakcxError(f"gdalwarp failed for {ns}{abs(lat)} {ew}{abs(lon)}: {warp.stderr.strip()[-300:]}")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    tr = subprocess.run(["gdal_translate", "-q", "-of", "DTED", tmp, out_path], capture_output=True, text=True)
+    os.remove(tmp)
+    if tr.returncode != 0:
+        raise TakcxError(f"gdal_translate failed: {tr.stderr.strip()[-300:]}")
+    for extra in glob.glob(out_path + ".aux.xml"):
+        os.remove(extra)
+    return True
+
+
+def cmd_elevation(args):
+    team = load_team()
+    for tool in ("gdalwarp", "gdal_translate"):
+        if not shutil.which(tool):
+            raise TakcxError("GDAL isn't installed. Run: sudo apt install -y gdal-bin")
+    lat, lon, label = geocode(args.near)
+    level = args.level
+    # 1x1 degree cells covering a box of +/- radius around the center
+    dlat = args.radius / 111.0
+    dlon = args.radius / (111.0 * max(math.cos(math.radians(lat)), 0.1))
+    cells = [(la, lo) for la in range(math.floor(lat - dlat), math.floor(lat + dlat) + 1)
+             for lo in range(math.floor(lon - dlon), math.floor(lon + dlon) + 1)]
+    limit = 16 if level == 2 else 64
+    if len(cells) > limit:
+        raise TakcxError(f"That's {len(cells)} one-degree cells; keep it to {limit} (smaller --radius"
+                         + (" or --level 1)." if level == 2 else ")."))
+    print(f"Elevation for {args.radius} km around {label}: {len(cells)} cell(s), DTED level {level} "
+          f"({'30' if level == 2 else '90'} m)")
+    area = slug(label.split(",")[0]).lower()
+    work = os.path.join(TAKCX_HOME, "elevation", f"{area}-work")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    made = []
+    for i, (la, lo) in enumerate(cells, 1):
+        name = f"{'e' if lo >= 0 else 'w'}{abs(lo):03d}/{'n' if la >= 0 else 's'}{abs(la):02d}.dt{level}"
+        print(f"  [{i}/{len(cells)}] {name} ...", end="", flush=True)
+        if build_dted_cell(la, lo, level, os.path.join(work, "DTED", name), work):
+            made.append(name)
+            print(" done")
+        else:
+            print(" ocean, skipped")
+    if not made:
+        raise TakcxError("No land elevation found there.")
+    zip_name = f"{slug(team['TEAM_NAME'])}-elevation-{area}.zip"
+    zip_path = os.path.join(TAKCX_HOME, "elevation", zip_name)
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for name in made:
+            z.write(os.path.join(work, "DTED", name), f"DTED/{name}")
+    shutil.rmtree(work, ignore_errors=True)
+    size_mb = os.path.getsize(zip_path) / 1024 ** 2
+    print(f"\nBuilt {zip_path} ({size_mb:.0f} MB).")
+
+    # Publish it once on the web server and link it from everyone's welcome page.
+    conf_path = os.path.join(TAKCX_HOME, "team.conf")
+    token = team.get("ELEVATION_TOKEN") or secrets.token_urlsafe(12)
+    dest = os.path.join(WEB_ROOT, "files", token)
+    if os.access(WEB_ROOT, os.W_OK):
+        shutil.rmtree(dest, ignore_errors=True)
+        os.makedirs(dest)
+        shutil.copy(zip_path, dest)
+        url = f"https://{team['SERVER_ADDRESS']}/files/{token}/{zip_name}"
+        for key, value in (("ELEVATION_TOKEN", token), ("ELEVATION_URL", url),
+                           ("ELEVATION_AREA", label.split(",")[0].replace('"', "")),
+                           ("ELEVATION_SIZE", f"{size_mb:.0f} MB")):
+            write_shell_conf_value(conf_path, key, value)
+        print(f"Download link: {url}")
+        if os.path.isdir(BUDDIES_DIR) and os.listdir(BUDDIES_DIR):
+            cmd_rebuild(argparse.Namespace(all=True, names=[], color=None, role=None, callsign=None))
+    else:
+        print(f"Couldn't publish it (can't write {WEB_ROOT}); send the file directly instead.")
+    print("In ATAK: Import -> Local SD -> pick the file -> 'Zipped DTED directories'.")
+
+
 def cmd_doctor(args):
     ok = True
 
@@ -1409,6 +1533,12 @@ def main(argv=None):
     p.add_argument("--near", help='town or "lat,lon" to center on, e.g. "Denver, CO"')
     p.add_argument("--radius", type=int, help="nautical miles around it, max 250 (default 50)")
     p.set_defaults(func=cmd_aircraft)
+    p = sub.add_parser("elevation", help="detailed elevation data (DTED) for your area")
+    p.add_argument("--near", required=True, help='town or "lat,lon" at the center')
+    p.add_argument("--radius", type=int, default=50, help="km around it (default 50)")
+    p.add_argument("--level", type=int, choices=[1, 2], default=2,
+                   help="2 = 30 m detail (default), 1 = 90 m (much smaller files)")
+    p.set_defaults(func=cmd_elevation)
     p = sub.add_parser("plugin", help="push ATAK plugins to everyone")
     p.add_argument("action", choices=["upload", "list", "remove"])
     p.add_argument("target", nargs="?", help="APK file (upload) or package name (remove)")

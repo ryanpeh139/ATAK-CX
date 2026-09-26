@@ -53,9 +53,21 @@ For large areas you can also make an **MBTiles** or **GeoPackage** file on a com
 (e.g. with [MOBAC](https://mobac.sourceforge.io/) or QGIS) and copy it into the
 `atak/imagery` folder on the phone.
 
-**Elevation:** ATAK's elevation, line-of-sight and slope tools need elevation
-data (DTED). Without it they're limited. Search "ATAK DTED" for how to add it
-for your region.
+**Elevation:** out of the box ATAK only streams very coarse elevation data.
+For your area, build detailed 30 m terrain data (DTED level 2, from the free
+Copernicus GLO-30 elevation model) on the server:
+
+```bash
+takcx elevation --near "Denver, CO"              # 50 km around it
+takcx elevation --near "Moab, UT" --radius 100   # bigger area
+takcx elevation --near "Anchorage" --level 1     # 90 m, about 10x smaller
+```
+
+It builds one file (roughly 10-15 MB per 1°x1° area at 30 m) and puts a download
+link on everyone's welcome page. In ATAK: **☰ → Import → Local SD → the file →
+Zipped DTED directories**, then wait a few minutes. After that, ATAK's elevation
+readouts, **line of sight / viewshed** and slope tools work with real detail, even
+offline. Needs `gdal-bin` on the server (the installer adds it).
 
 ## When there's no cell signal
 

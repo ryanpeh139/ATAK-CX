@@ -5,11 +5,14 @@ map, and **one file per person** to get them connected. No fiddling with
 certificates, ports or server settings on anyone's phone.
 
 - **Works with:** ATAK (Android), iTAK (iPhone/iPad), WinTAK (Windows)
-- **You get:** live positions, encrypted team chat, a push-to-talk **team radio**
-  (voice channels locked to your team), **live drone and camera video**, **live
-  aircraft** on the map, **emergency alerts pushed to phones**, plugins pushed to everyone automatically, shared
-  markers, routes and photos, emergency alerts, a web map in your browser, and
-  satellite + topo maps (downloadable for offline use) already on every device.
+- **You get:**
+  - live positions, shared markers, routes and photos, and encrypted team chat
+  - a push-to-talk **team radio**, with voice channels locked to your team
+  - **live drone and camera video**, and **live aircraft** on the map
+  - **emergency alerts pushed to phones**, even with ATAK closed
+  - satellite and topo maps, **US public-land maps**, and detailed **elevation
+    data** for your area, all usable offline
+  - plugins pushed to everyone automatically, plus a web map in your browser
 - **Built on:** [OpenTAKServer](https://github.com/brian7704/OpenTAKServer),
   a free, open-source TAK server. The apps are the standard free TAK apps;
   what ATAK-CX customizes is the setup: your team name, callsigns, team colors,
@@ -77,6 +80,7 @@ It opens a page with the right download and steps for their device.
 | `takcx add-drone drone1 --share` | Login + stream address for a DJI drone (DJI Fly → RTMP) |
 | `takcx aircraft on --near "Town"` | Live planes and helicopters on everyone's map |
 | `takcx plugin upload FILE.apk` | Push an ATAK plugin to everyone's phone |
+| `takcx elevation --near "Town"` | Detailed terrain data for ATAK's line-of-sight and slope tools |
 | `takcx doctor` | Check that everything is running and reachable |
 
 The web map and admin panel are at `https://your-server/` (login in `~/takcx/admin.conf`).
@@ -103,6 +107,8 @@ setup/enable-radio.sh     team radio: Mumble locked to takcx accounts (run by th
 setup/enable-video.sh     live video for drones and cameras (run by the installer)
 setup/duckdns.sh          keep a free DuckDNS name pointed at a home server
 setup/enable-alerts.sh    emergency alerts to phones (ntfy / Discord / Telegram)
+setup/enable-publicland.sh  US public-land maps (land ownership over topo/satellite)
+takcx/tile_server.py      the public-land map tile blender
 takcx/alert_bridge.py     the alerts service
 setup/backup.sh           nightly backup of certificates, database and packages
 takcx/takcx.py            the `takcx` command

@@ -268,6 +268,28 @@ else
   fi
 fi
 
+# --------------------------------------------------------------------------- elevation
+step "Elevation data for your area"
+if [[ -n ${ELEVATION_URL:-} ]]; then
+  echo "Already built (${ELEVATION_AREA:-?}). Rebuild or change area: takcx elevation --near \"Town\""
+else
+  echo "Detailed 30 m terrain data so ATAK's elevation, slope and line-of-sight tools work"
+  echo "properly, even offline. Everyone gets a download link on their welcome page."
+  if yes_no "Build elevation data for your area?" Y; then
+    elev_near="${AIRCRAFT_NEAR:-}"
+    elev_near="$(ask "Center it on which town, or lat,lon" "$elev_near")"
+    if [[ -n $elev_near ]]; then
+      command -v gdalwarp >/dev/null || sudo apt-get install -y -qq gdal-bin >/dev/null
+      takcx elevation --near "$elev_near" --radius 50 \
+        || note "Elevation build failed. Try later: takcx elevation --near \"Town\""
+      # shellcheck disable=SC1090
+      . "$TEAM_CONF"
+    else
+      note "Skipped. Build it later: takcx elevation --near \"Town, State\""
+    fi
+  fi
+fi
+
 # --------------------------------------------------------------------------- HTTPS
 if ! is_ip "$SERVER_ADDRESS" && [[ ${HTTPS_ENABLED:-no} != yes ]]; then
   step "HTTPS (Let's Encrypt)"
@@ -297,6 +319,7 @@ Team radio:       $( [[ ${RADIO_ENABLED:-no} == yes ]] && echo "$SERVER_ADDRESS 
 Live video:       $( [[ ${VIDEO_ENABLED:-no} == yes ]] && echo "on (drones: takcx add-drone drone1 --share)" || echo "off (turn on: setup/enable-video.sh)" )
 Emergency alerts: $( [[ ${ALERTS_ENABLED:-no} == yes ]] && echo "on (ntfy topic: ${NTFY_TOPIC:-?})" || echo "off (turn on: setup/enable-alerts.sh)" )
 Public-land maps: $( [[ ${PUBLICLAND_ENABLED:-no} == yes ]] && echo "on" || echo "off (turn on: setup/enable-publicland.sh)" )
+Elevation data:   $( [[ -n ${ELEVATION_URL:-} ]] && echo "${ELEVATION_AREA:-built} (${ELEVATION_SIZE:-})" || echo "none (build: takcx elevation --near \"Town\")" )
 Aircraft:         $( [[ ${AIRCRAFT_ENABLED:-no} == yes ]] && echo "on, near ${AIRCRAFT_NEAR:-?}" || echo "off (turn on: takcx aircraft on --near \"Town\")" )
 
 Add your first buddy (and yourself!):

@@ -208,6 +208,7 @@ for a few minutes; that's normal. Here's every question it asks and what to answ
 | Turn on emergency alerts? → Discord / Telegram | **Y**, then press Enter to skip Discord/Telegram (or paste them) |
 | Turn on public-land maps? | **Y** (US only) |
 | Turn on aircraft tracking? → which town? | **Y**, then e.g. `Denver, CO` or `39.74,-104.99` |
+| Build elevation data for your area? → which town? | **Y**, and press Enter to reuse the aircraft town (takes a minute or two) |
 | Get a free certificate for … ? | **Y** (needs ports 80/443 forwarded; you can re-run later with `./setup/enable-https.sh`) |
 | Email for Let's Encrypt | Optional, just press Enter |
 | Back up every night? | **Y** |
@@ -303,6 +304,14 @@ takcx plugin list
 To copy a file from your computer to the Pi:
 `scp ATAK-Plugin-xxxx.apk yourusername@takserver.local:~`
 
+### Elevation data
+Already built if you said yes. Everyone's welcome page has a download link; in
+ATAK it's **Import → Local SD → the file → Zipped DTED directories**. Build a
+different or bigger area any time:
+```
+takcx elevation --near "Moab, UT" --radius 80
+```
+
 ### Emergency alerts on phones
 Already on if you said yes. Everyone's welcome page shows how to subscribe in the
 free **ntfy** app. Share the topic with family or base too. [Alerts guide](7-alerts.md)
@@ -335,5 +344,6 @@ What to buy and how to set them up: [Meshtastic gear](6-meshtastic-gear.md).
 | Drone login | `takcx add-drone drone1 --share` |
 | Aircraft area | `takcx aircraft on --near "Town"` |
 | Push a plugin | `takcx plugin upload FILE.apk` |
+| Elevation data for an area | `takcx elevation --near "Town"` |
 | Rebuild everyone's files (after editing `~/takcx/team.conf`) | `takcx rebuild --all` |
 | Something wrong? | `takcx doctor` |
