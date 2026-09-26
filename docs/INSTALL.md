@@ -155,25 +155,10 @@ dashboard) as the server address. Skip 4B/4C.
 In your SSH session:
 
 ```
-sudo apt update && sudo apt install -y git gh
-```
-
-Your ATAK-CX repo on GitHub is **private**, so sign the Pi in to GitHub once:
-
-```
-gh auth login
-```
-
-Choose **GitHub.com** → **HTTPS** → **Yes** → **Login with a web browser**. It
-shows a code. Open **github.com/login/device** on your computer or phone, enter
-the code and approve. Then:
-
-```
+sudo apt update && sudo apt install -y git
 git clone https://github.com/ryanpeh139/ATAK-CX.git
 cd ATAK-CX
 ```
-
-(If you make the repo public in GitHub → Settings, you can skip `gh auth login`.)
 
 **Using DuckDNS (4B)?** Run this now, with your subdomain and token:
 

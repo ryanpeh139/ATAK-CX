@@ -51,9 +51,7 @@ sets a strong admin password, turns on a firewall, sets up the team radio,
 gets an HTTPS certificate (if you use a domain name) and schedules nightly
 backups. It takes about 15–30 minutes (longer on a Raspberry Pi).
 
-> If this repo is private, clone it on the server with a
-> [GitHub token](https://github.com/settings/tokens) or make it public.
-> It contains no secrets: passwords and keys are generated on the server.
+> The repo contains no secrets: passwords and keys are generated on the server.
 
 **3. Add people** (start with yourself):
 
