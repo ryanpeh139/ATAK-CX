@@ -60,6 +60,12 @@ echo "System: ${PRETTY_NAME:-$ID} ($(uname -m)), using OpenTAKServer's $OTS_INST
 mem_mb=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
 swap_mb=$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo)
 echo "Memory: ${mem_mb} MB RAM, ${swap_mb} MB swap"
+if (( mem_mb < 900 )); then
+  die "This machine has only ${mem_mb} MB of RAM. OpenTAKServer uses about 1 GB just idling,
+so it can't run here (that includes the Pi Zero 2 W and Pi 3A+). Swap on an SD card won't
+save it: it would crawl and wear the card out. Use a cloud server or a Pi 4/5 with 2 GB+
+instead. See docs/1-get-a-server.md."
+fi
 if (( mem_mb < 1800 )); then
   note "Under 2 GB of RAM. The server runs, but it's tight."
   if (( swap_mb < 1000 )) && yes_no "Add a 2 GB swap file so it doesn't run out of memory?" Y; then

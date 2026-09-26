@@ -34,7 +34,11 @@ TCP ports there: **80, 443, 8089, 8443, 8446**.
 
 ## Option B: home server (Raspberry Pi 4/5 or old PC)
 
-Install Ubuntu Server or Raspberry Pi OS (64-bit), with 4 GB RAM or more.
+Install Ubuntu Server or Raspberry Pi OS (64-bit) on a machine with 2 GB RAM
+or more (4 GB is comfortable). The server uses about 1 GB just idling, so
+**a Pi Zero / Zero 2 W or Pi 3A+ (512 MB) can't run it**, and a 1 GB Pi 3B is
+too tight to rely on. The installer checks this and stops if there isn't enough memory.
+
 Then choose how phones outside your house will reach it:
 
 **Port forwarding (everyone just uses the app):** in your router, forward TCP
