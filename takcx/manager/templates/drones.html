@@ -1,40 +1,57 @@
 {% extends "base.html" %}
 {% block title %}Drones{% endblock %}
 {% block body %}
-<h1>Drones</h1>
+<div class="pagehead">
+  <h1>{{ icon('drone', 22) }}Drones</h1>
+  {% if rows %}<span class="muted">{{ rows | length }} drone{{ 's' if rows | length != 1 }}</span>{% endif %}
+</div>
 {% if team.get('VIDEO_ENABLED') != 'yes' %}
-<div class="flash warn">Live video isn't on yet. Over SSH run <code>cd ~/ATAK-CX && ./setup/enable-video.sh</code></div>
+<div class="flash warn">{{ icon('alert') }}<div>Live video isn't on yet. Over SSH run <code>cd ~/ATAK-CX && ./setup/enable-video.sh</code></div></div>
 {% endif %}
-<div class="card">
-  <h2>Add a drone</h2>
+
+<details class="card adder" {{ 'open' if not rows }}>
+  <summary>{{ icon('plus') }}Add a drone<span class="hint">works with DJI Fly's RTMP live streaming</span></summary>
   <p class="muted">Each drone gets its own login and a stream address for DJI Fly (Transmission → Live Streaming Platforms → RTMP). The name is what the team sees in ATAK's Video Player.</p>
-  <form method="post" action="{{ url_for('m.drones_add') }}" class="row">
+  <form method="post" action="{{ url_for('m.drones_add') }}" class="row" style="align-items:center">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <div class="field"><label>Name, e.g. drone1</label><input type="text" name="name" pattern="[a-z0-9][a-z0-9_.]{0,31}" required></div>
-    <label class="check"><input type="checkbox" name="share" checked> Make a setup page to open on the DJI Fly phone</label>
-    <button>Add drone</button>
+    <div class="field"><label>Name, e.g. drone1</label><input type="text" name="name" pattern="[a-z0-9][a-z0-9_.]{0,31}" autocapitalize="none" autocomplete="off" required></div>
+    <label class="check" style="flex-basis:100%"><input type="checkbox" name="share" checked> Make a setup page to open on the DJI Fly phone</label>
+    <button>{{ icon('plus') }}Add drone</button>
   </form>
+</details>
+
+{% if rows %}
+<div class="cards">
+  {% for r in rows %}
+  <article class="person {{ '' if r.active else 'disabled' }}">
+    <div class="ph">
+      <span class="avatar" style="--c:var(--accent)">{{ icon('drone', 22) }}</span>
+      <div class="name"><b>{{ r.username }}</b><small>RTMP stream · {{ team.get('SERVER_ADDRESS', '') }}</small></div>
+    </div>
+    <div class="chips">
+      <span class="pill {{ 'ok' if r.active else 'bad' }}">{{ 'enabled' if r.active else 'disabled' }}</span>
+      {% if r.link %}<a class="pill info" href="{{ r.link }}">{{ icon('link', 13) }}setup page is up</a>{% endif %}
+    </div>
+    <div class="cta">
+      <a class="btn alt small" href="{{ url_for('m.person_login', name=r.username) }}">{{ icon('key', 15) }}Stream login</a>
+      <details class="more">
+        <summary class="btn alt small icon" aria-label="More actions for {{ r.username }}">{{ icon('more', 16) }}More</summary>
+        <div class="pop">
+          {% for action, label, ic in ([('unshare', 'Take page down', 'link')] if r.link else [('share', 'Make page', 'link')])
+                                      + [('disable', 'Disable', 'lock') if r.active else ('enable', 'Enable', 'ok')] %}
+          <form method="post" action="{{ url_for('m.person_action', name=r.username, action=action) }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="from" value="drones">
+            <button class="item {{ 'danger' if action == 'disable' }}">{{ icon(ic, 16) }}{{ label }}</button></form>
+          {% endfor %}
+          <div class="sep"></div>
+          <form method="post" action="{{ url_for('m.person_action', name=r.username, action='remove') }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="from" value="drones"><input type="hidden" name="confirm" value="{{ r.username }}">
+            <button class="item danger">{{ icon('trash', 16) }}Remove</button></form>
+        </div>
+      </details>
+    </div>
+  </article>
+  {% endfor %}
 </div>
-<div class="card scroll">
-  <table>
-    <tr><th>Drone</th><th>Status</th><th>Setup page</th><th>Actions</th></tr>
-    {% for r in rows %}
-    <tr><td><b><a href="{{ url_for('m.person_login', name=r.username) }}">{{ r.username }}</a></b></td>
-      <td><span class="pill {{ 'ok' if r.active else 'bad' }}">{{ 'enabled' if r.active else 'disabled' }}</span></td>
-      <td>{% if r.link %}<a href="{{ r.link }}">open</a>{% else %}<span class="muted">-</span>{% endif %}</td>
-      <td><div class="actions">
-        {% for action, label in ([('unshare', 'Take page down')] if r.link else [('share', 'Make page')]) + [('disable', 'Disable') if r.active else ('enable', 'Enable')] %}
-        <form class="inline" method="post" action="{{ url_for('m.person_action', name=r.username, action=action) }}">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="from" value="drones">
-          <button class="small {{ 'danger' if action == 'disable' else 'alt' }}">{{ label }}</button></form>
-        {% endfor %}
-        <form class="inline" method="post" action="{{ url_for('m.person_action', name=r.username, action='remove') }}">
-          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="from" value="drones"><input type="hidden" name="confirm" value="{{ r.username }}">
-          <button class="small danger">Remove</button></form>
-      </div></td></tr>
-    {% else %}
-    <tr><td colspan="4" class="muted">No drones yet.</td></tr>
-    {% endfor %}
-  </table>
-</div>
+{% endif %}
 {% endblock %}

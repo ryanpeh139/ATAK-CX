@@ -20,6 +20,7 @@ Only uses the Python standard library.
 """
 
 import argparse
+import getpass
 import glob
 import html
 import http.client
@@ -641,14 +642,19 @@ def onboarding_page(team, username, profile, files):
             'the area and choose how much detail you want.</p>'
             f'<a class="btn alt" href="{h(files["maps"])}" download>Maps only ({h(files["maps"])})</a></div>')
     radio = team.get("RADIO_ENABLED", "no").lower() == "yes"
-    password = profile.get("password") if profile.get("show_web_login") else None
+    own = bool(profile.get("own_password"))
+    password = profile.get("password") if profile.get("show_web_login") and not own else None
     web_login = ""
-    if password:
+    if password or own:
         web_login = (f'<dt>Web map</dt><dd><a href="https://{h(team["SERVER_ADDRESS"])}/">'
                      f'https://{h(team["SERVER_ADDRESS"])}/</a></dd>'
                      f'<dt>Username</dt><dd>{h(username)}</dd>'
-                     f'<dt>Password</dt><dd>{h(password)}'
+                     f'<dt>Password</dt><dd>{h(password) if password else "the one you chose"}'
                      f'{" (web map and radio)" if radio else ""}</dd>')
+    if team.get("MANAGER_ENABLED", "no").lower() == "yes":
+        change = f"https://{team['SERVER_ADDRESS']}/manage/password"
+        web_login += (f'<dt>Change password</dt><dd><a href="{h(change)}">{h(change)}</a>'
+                      '<br><small>Pick your own. Your ATAK connection isn&rsquo;t affected.</small></dd>')
     return PAGE.substitute(
         team=h(team["TEAM_NAME"]), callsign=h(profile["callsign"]), color=h(profile["color"]),
         role=h(profile["role"]), server=h(team["SERVER_ADDRESS"]),
@@ -657,7 +663,7 @@ def onboarding_page(team, username, profile, files):
         video_card=VIDEO_CARD if team.get("VIDEO_ENABLED", "no").lower() == "yes" else "",
         alerts_card=alerts_card(team),
         elevation_card=elevation_card(team),
-        radio_card=radio_card(team, username, password) if radio else "")
+        radio_card=radio_card(team, username, password, own) if radio else "")
 
 
 CHAT_CARD = """<div class="card">
@@ -725,14 +731,15 @@ def alerts_card(team):
   </div>"""
 
 
-def radio_card(team, username, password):
+def radio_card(team, username, password, own=False):
     h = html.escape
     server = team["SERVER_ADDRESS"]
     channels = [c.strip() for c in team.get("RADIO_CHANNELS", "Main").split(",") if c.strip()]
     title = urllib.parse.quote(f"{team['TEAM_NAME']} Radio")
     login = urllib.parse.quote(username) + (f":{urllib.parse.quote(password)}" if password else "")
     link = f"mumble://{login}@{server}:64738/?title={title}&version=1.2.0"
-    pw_hint = "the password below" if password else "your password (ask whoever sent this page)"
+    pw_hint = ("the password below" if password else "the password you chose" if own
+               else "your password (ask whoever sent this page)")
     return f"""<div class="card">
     <h2>Team radio</h2>
     <p>Push-to-talk voice channels, like walkie-talkies over the internet. Only the team can get in.</p>
@@ -943,9 +950,45 @@ def cmd_enable(args):
         ots.call("POST", "/api/user/password/reset",
                  {"username": username, "new_password": profile["password"]})
         print(f"{username} is enabled again, with their old password.")
+    elif profile.get("own_password"):
+        password = new_password()
+        set_account_password(load_team(), ots, username, password)
+        print(f"{username} is enabled again. They had picked their own password, which takcx "
+              f"doesn't keep, so here's a new one: {password}\n"
+              "They can change it again at /manage/password.")
     else:
         print(f"{username} is enabled again, but takcx doesn't know their old password. "
               "Set a new one in the web admin (Users) and give it to them.")
+
+
+def set_account_password(team, ots, username, password, chosen=False):
+    """Set someone's password (radio, web map, video) and refresh their files and link.
+
+    chosen=True means they picked it themselves: takcx then keeps no copy of it, so it
+    never shows up on their welcome page, credentials.txt or the Manager."""
+    ots.call("POST", "/api/user/password/reset", {"username": username, "new_password": password})
+    profile = load_profile(username)
+    if profile is None:
+        return None
+    if chosen:
+        profile.pop("password", None)
+        profile["own_password"] = True
+    else:
+        profile["password"] = password
+        profile.pop("own_password", None)
+    if profile.get("type") == "drone":
+        write_drone_page(team, username, profile)
+    else:
+        build_packages(team, read_ots_config(), username, profile)
+        creds = os.path.join(BUDDIES_DIR, username, "credentials.txt")
+        with open(creds, "w") as f:
+            f.write(f"username: {username}\npassword: {password if not chosen else '(they chose their own)'}\n"
+                    f"web map: https://{team['SERVER_ADDRESS']}/\n")
+        os.chmod(creds, 0o600)
+    token_file = os.path.join(BUDDIES_DIR, username, "share_token")
+    if os.path.exists(token_file):
+        publish(username, open(token_file).read().strip())
+    return profile
 
 
 def cmd_reset_password(args):
@@ -956,28 +999,57 @@ def cmd_reset_password(args):
     if not ots.find_user(username):
         raise TakcxError(f"No account called {username}.")
     password = new_password()
-    ots.call("POST", "/api/user/password/reset", {"username": username, "new_password": password})
-    profile = load_profile(username)
-    if profile is not None:
-        profile["password"] = password
-        if profile.get("type") == "drone":
-            write_drone_page(team, username, profile)
-        else:
-            build_packages(team, read_ots_config(), username, profile)
-            creds = os.path.join(BUDDIES_DIR, username, "credentials.txt")
-            with open(creds, "w") as f:
-                f.write(f"username: {username}\npassword: {password}\n"
-                        f"web map: https://{team['SERVER_ADDRESS']}/\n")
-            os.chmod(creds, 0o600)
-        token_file = os.path.join(BUDDIES_DIR, username, "share_token")
-        if os.path.exists(token_file):
-            publish(username, open(token_file).read().strip())
+    profile = set_account_password(team, ots, username, password)
     print(f"New password for {username}: {password}")
     if profile and profile.get("type") == "drone":
         print("The drone's stream address changed; re-copy it from its setup page.")
     else:
         print("Their ATAK connection isn't affected (it uses a certificate). Update it in the "
               "radio app (Mumla/Mumble) and for the web map.")
+
+
+PASSWORD_MIN, PASSWORD_MAX = 8, 128
+
+
+def check_new_password(username, password):
+    """Why a password someone picked isn't OK, or None if it's fine."""
+    if len(password) < PASSWORD_MIN:
+        return f"Use at least {PASSWORD_MIN} characters."
+    if len(password) > PASSWORD_MAX:
+        return f"Use at most {PASSWORD_MAX} characters."
+    if any(ord(c) < 32 or ord(c) == 127 for c in password):
+        return "Use letters, numbers, spaces and symbols only."
+    if password.lower() == username.lower():
+        return "Don't use your username as your password."
+    return None
+
+
+def cmd_set_password(args):
+    """Set a password someone picked themselves. Read from stdin (or typed twice)."""
+    team = load_team()
+    username = check_username(args.name)
+    admin_user = read_shell_conf(os.path.join(TAKCX_HOME, "admin.conf")).get("OTS_ADMIN_USER", "administrator")
+    if username == admin_user:
+        raise TakcxError(f"{username} is the account takcx itself uses; change it with: takcx admin-password")
+    profile = load_profile(username)
+    if profile is None:
+        raise TakcxError(f"{username} wasn't made with takcx. Change it in the web admin (Users).")
+    if profile.get("type") == "drone":
+        raise TakcxError(f"{username} is a drone. Use: takcx reset-password {username}")
+    if sys.stdin.isatty():
+        password = getpass.getpass(f"New password for {username}: ")
+        if getpass.getpass("Same again: ") != password:
+            raise TakcxError("Those didn't match.")
+    else:
+        password = sys.stdin.readline().rstrip("\r\n")
+    problem = check_new_password(username, password)
+    if problem:
+        raise TakcxError(problem)
+    ots = connect(team)
+    if not ots.find_user(username):
+        raise TakcxError(f"No account called {username}.")
+    set_account_password(team, ots, username, password, chosen=True)
+    print(f"{username}'s password is changed (radio, web map and video). takcx doesn't keep a copy.")
 
 
 def cmd_remove(args):
@@ -1565,6 +1637,9 @@ def main(argv=None):
     p = sub.add_parser("reset-password", help="give someone a new password (radio, web map, video)")
     p.add_argument("name")
     p.set_defaults(func=cmd_reset_password)
+    p = sub.add_parser("set-password", help="set a password someone picked (typed, or read from stdin)")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_set_password)
     p = sub.add_parser("remove", help="delete someone for good")
     p.add_argument("name")
     p.add_argument("-y", "--yes", action="store_true", help="don't ask for confirmation")

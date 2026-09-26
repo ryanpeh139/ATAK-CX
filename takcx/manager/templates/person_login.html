@@ -1,31 +1,39 @@
 {% extends "base.html" %}
 {% block title %}{{ name }}{% endblock %}
 {% block body %}
-<h1>{{ profile.get('callsign', name) }} <span class="muted" style="font-size:.7em">({{ name }})</span></h1>
+{% set drone = profile.get('type') == 'drone' %}
+{% set callsign = profile.get('callsign') or name %}
+<div class="pagehead">
+  <h1><span class="avatar" style="--c:{{ 'var(--accent)' if drone else profile.get('color') | team_hex }}">{% if drone %}{{ icon('drone', 22) }}{% else %}{{ initials(callsign) }}{% endif %}</span>
+    <span>{{ callsign }} <span class="muted mono" style="font-size:.62em;font-weight:500">@{{ name }}</span></span></h1>
+  <a class="btn alt" href="{{ url_for('m.drones') if drone else url_for('m.people') }}">{{ icon('back') }}Back</a>
+</div>
 <div class="grid">
   <div class="card">
-    <h2>Login</h2>
-    <table>
-      <tr><td>Username</td><td><input type="text" readonly value="{{ name }}"></td></tr>
-      <tr><td>Password</td><td><input type="text" readonly value="{{ profile.get('password', '(unknown)') }}"></td></tr>
-      {% if profile.get('type') != 'drone' %}
-      <tr><td>Web map</td><td><a href="https://{{ team.get('SERVER_ADDRESS') }}/">https://{{ team.get('SERVER_ADDRESS') }}/</a></td></tr>
-      {% if team.get('RADIO_ENABLED') == 'yes' %}<tr><td>Radio</td><td>{{ team.get('SERVER_ADDRESS') }}, port 64738, same username and password</td></tr>{% endif %}
-      {% endif %}
-    </table>
-    <p class="muted" style="font-size:.85em">Used for the radio, web map and video. ATAK itself logs in with a certificate, so changing this doesn't disconnect their ATAK.</p>
-    <form method="post" action="{{ url_for('m.person_action', name=name, action='reset-password') }}">
-      <input type="hidden" name="csrf" value="{{ csrf }}">{% if profile.get('type') == 'drone' %}<input type="hidden" name="from" value="drones">{% endif %}
-      <button class="alt">Make a new password</button></form>
+    <h2>{{ icon('key', 15) }}Login</h2>
+    <label>Username</label><p><input type="text" readonly value="{{ name }}"></p>
+    <label>Password</label>
+    {% if profile.get('own_password') %}<p class="muted">{{ icon('lock', 15) }} They picked their own, so it isn't stored or shown. Forgot it? Make a new one below.</p>
+    {% else %}<p><input type="text" readonly value="{{ profile.get('password', '(unknown)') }}"></p>{% endif %}
+    {% if not drone %}
+    <dl class="kv" style="margin-top:14px">
+      <dt>{{ icon('globe', 15) }} Web map</dt><dd><a href="https://{{ team.get('SERVER_ADDRESS') }}/">https://{{ team.get('SERVER_ADDRESS') }}/</a></dd>
+      {% if team.get('RADIO_ENABLED') == 'yes' %}<dt>{{ icon('radio', 15) }} Radio</dt><dd><span class="mono">{{ team.get('SERVER_ADDRESS') }}</span>, port <span class="mono">64738</span>, same username and password</dd>{% endif %}
+    </dl>
+    {% endif %}
+    <p class="note">Used for the radio, web map and video. ATAK itself logs in with a certificate, so changing this doesn't disconnect their ATAK.</p>
+    <form method="post" action="{{ url_for('m.person_action', name=name, action='reset-password') }}" style="margin-top:12px">
+      <input type="hidden" name="csrf" value="{{ csrf }}">{% if drone %}<input type="hidden" name="from" value="drones">{% endif %}
+      <button class="alt">{{ icon('restart', 16) }}Make a new password</button></form>
   </div>
   {% if link %}
   <div class="card">
-    <h2>{{ 'Setup page' if profile.get('type') == 'drone' else 'Welcome page' }}</h2>
+    <h2>{{ icon('link', 15) }}{{ 'Setup page' if drone else 'Welcome page' }}</h2>
     <p><input type="text" readonly value="{{ link }}"></p>
     {% if link_qr %}<div class="qr">{{ link_qr | safe_svg | safe }}</div>{% endif %}
-    <p><a class="btn alt" href="{{ link }}">Open</a></p>
+    <p class="note">Scan with their phone's camera, or send them the link. Treat it like a password.</p>
+    <p style="margin-top:12px"><a class="btn alt" href="{{ link }}">{{ icon('globe', 16) }}Open</a></p>
   </div>
   {% endif %}
 </div>
-<p><a href="{{ url_for('m.drones') if profile.get('type') == 'drone' else url_for('m.people') }}">← Back</a></p>
 {% endblock %}

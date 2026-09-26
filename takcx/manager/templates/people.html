@@ -1,58 +1,85 @@
 {% extends "base.html" %}
 {% block title %}People{% endblock %}
 {% block body %}
-<h1>People</h1>
-<div class="card">
-  <h2>Add someone</h2>
+{% set managed = rows | selectattr('managed') | list %}
+{% set others = rows | rejectattr('managed') | list %}
+<div class="pagehead">
+  <h1>{{ icon('people', 22) }}People</h1>
+  {% if managed %}<span class="muted">{{ managed | length }} on the team · {{ managed | selectattr('online') | list | length }} online now</span>{% endif %}
+</div>
+
+<details class="card adder" {{ 'open' if not managed }}>
+  <summary>{{ icon('plus') }}Add someone<span class="hint">they get a private link with everything they need</span></summary>
   <form method="post" action="{{ url_for('m.people_add') }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <div class="row">
-      <div class="field"><label>Username (lowercase letters, numbers, _ or .)</label><input type="text" name="name" pattern="[a-z0-9][a-z0-9_.]{0,31}" required></div>
+      <div class="field"><label>Username (lowercase letters, numbers, _ or .)</label><input type="text" name="name" pattern="[a-z0-9][a-z0-9_.]{0,31}" autocapitalize="none" autocomplete="off" required></div>
       <div class="field"><label>Callsign on the map (optional)</label><input type="text" name="callsign" maxlength="40"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
       <div class="field"><label>Team color</label><select name="color"><option value="">Default ({{ team.get('DEFAULT_TEAM_COLOR', 'Cyan') }})</option>{% for c in colors %}<option>{{ c }}</option>{% endfor %}</select></div>
       <div class="field"><label>Role</label><select name="role"><option value="">Default ({{ team.get('DEFAULT_ROLE', 'Team Member') }})</option>{% for r in roles %}<option>{{ r }}</option>{% endfor %}</select></div>
     </div>
-    <div class="row" style="margin-top:10px">
+    <div class="row" style="margin-top:14px;align-items:center">
       <label class="check"><input type="checkbox" name="share" checked> Make a private link for them</label>
       <label class="check"><input type="checkbox" name="admin"> Also a server admin</label>
-      <button>Add</button>
+      <button style="margin-left:auto">{{ icon('plus') }}Add</button>
     </div>
   </form>
-</div>
-<div class="card scroll">
-  <h2>Everyone</h2>
-  <table>
-    <tr><th>User</th><th>Callsign</th><th>Color / role</th><th>Status</th><th>Link</th><th>Actions</th></tr>
-    {% for r in rows %}
-    <tr>
-      <td><b>{% if r.managed %}<a href="{{ url_for('m.person_login', name=r.username) }}">{{ r.username }}</a>{% else %}{{ r.username }}{% endif %}</b>{% if r.admin %} <span class="pill warn">admin</span>{% endif %}
-          {% if r.last %}<br><span class="muted" style="font-size:.8em">last login {{ r.last }}</span>{% endif %}</td>
-      <td>{{ r.profile.get('callsign', '-') }}</td>
-      <td>{{ r.profile.get('color', '-') }}<br><span class="muted">{{ r.profile.get('role', '') }}</span></td>
-      <td><span class="pill {{ 'ok' if r.active else 'bad' }}">{{ 'enabled' if r.active else 'disabled' }}</span></td>
-      <td>{% if r.link %}<a href="{{ r.link }}">open</a>{% else %}<span class="muted">-</span>{% endif %}</td>
-      <td>
-        {% if r.managed %}
-        <div class="actions">
-          <a class="btn alt small" style="padding:3px 9px;font-size:.85em" href="{{ url_for('m.person_login', name=r.username) }}">Show login</a>
-          {% for action, label in ([('unshare', 'Take link down')] if r.link else [('share', 'Make link')]) + [('disable', 'Disable') if r.active else ('enable', 'Enable'), ('rebuild', 'Rebuild')] %}
-          <form class="inline" method="post" action="{{ url_for('m.person_action', name=r.username, action=action) }}">
-            <input type="hidden" name="csrf" value="{{ csrf }}"><button class="small {{ 'danger' if action == 'disable' else 'alt' }}">{{ label }}</button></form>
+</details>
+
+{% if managed %}
+<div class="cards">
+  {% for r in managed %}
+  {% set p = r.profile %}
+  {% set callsign = p.get('callsign') or r.username %}
+  <article class="person {{ '' if r.active else 'disabled' }}">
+    <div class="ph">
+      <span class="avatar" style="--c:{{ p.get('color') | team_hex }}">{{ initials(callsign) }}<span class="dot {{ 'ok' if r.online else '' }}"></span></span>
+      <div class="name"><b>{{ callsign }}</b><small>@{{ r.username }} · {{ p.get('color', '?') }} · {{ p.get('role', 'Team Member') }}</small></div>
+    </div>
+    <div class="chips">
+      {% if not r.active %}<span class="pill bad">{{ icon('lock', 13) }}disabled</span>
+      {% elif r.online %}<span class="pill ok">online</span>
+      {% else %}<span class="pill off">offline</span>{% endif %}
+      {% if r.admin %}<span class="pill warn">admin</span>{% endif %}
+      {% if r.link %}<a class="pill info" href="{{ r.link }}" title="Their private welcome page">{{ icon('link', 13) }}link is up</a>{% endif %}
+    </div>
+    <div class="seen">{{ icon('phone', 14) }}
+      {% if r.last_seen %}Last seen <span title="{{ r.last_seen | stamp }}">{{ r.last_seen | ago }}</span>{% if r.devices %} on {{ r.devices | unique | join(', ') }}{% endif %}
+      {% else %}Hasn't connected a TAK app yet{% endif %}
+    </div>
+    <div class="cta">
+      <a class="btn alt small" href="{{ url_for('m.person_login', name=r.username) }}">{{ icon('key', 15) }}Show login</a>
+      <details class="more">
+        <summary class="btn alt small icon" aria-label="More actions for {{ r.username }}">{{ icon('more', 16) }}More</summary>
+        <div class="pop">
+          {% for action, label, ic in ([('unshare', 'Take link down', 'link')] if r.link else [('share', 'Make link', 'link')])
+                                      + [('rebuild', 'Rebuild their files', 'restart'), ('reset-password', 'Make a new password', 'key'),
+                                         ('disable', 'Disable', 'lock') if r.active else ('enable', 'Enable', 'ok')] %}
+          <form method="post" action="{{ url_for('m.person_action', name=r.username, action=action) }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><button class="item {{ 'danger' if action == 'disable' }}">{{ icon(ic, 16) }}{{ label }}</button></form>
           {% endfor %}
-        </div>
-        <details style="margin-top:4px"><summary>Remove…</summary>
-          <form method="post" action="{{ url_for('m.person_action', name=r.username, action='remove') }}" class="row" style="margin-top:6px">
+          <div class="sep"></div>
+          <form method="post" action="{{ url_for('m.person_action', name=r.username, action='remove') }}" class="confirm">
             <input type="hidden" name="csrf" value="{{ csrf }}">
-            <div class="field"><label>Type <b>{{ r.username }}</b> to confirm</label><input type="text" name="confirm" autocomplete="off"></div>
-            <button class="small danger">Remove for good</button></form>
-        </details>
-        {% else %}<span class="muted" style="font-size:.85em">not made with takcx</span>{% endif %}
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="6" class="muted">No one yet. Add yourself first.</td></tr>
-    {% endfor %}
-  </table>
-  <p class="muted" style="font-size:.85em">Disable locks someone out of the map, radio, video and web right away (lost phone?). Enable restores their old password. Take links down once people have joined.</p>
+            <label>Type <b>{{ r.username }}</b> to remove for good</label>
+            <div class="row" style="flex-wrap:nowrap"><input type="text" name="confirm" autocomplete="off" autocapitalize="none">
+            <button class="small danger" aria-label="Remove {{ r.username }}">{{ icon('trash', 15) }}</button></div>
+          </form>
+        </div>
+      </details>
+    </div>
+  </article>
+  {% endfor %}
 </div>
+{% elif not others %}
+<div class="card empty">{{ icon('people', 32) }}<p>No one yet. Add yourself first.</p></div>
+{% endif %}
+
+{% if others %}
+<p class="note">Other accounts on the server (not made here, so they have no files): {% for r in others %}<span class="mono">{{ r.username }}</span>{% if r.admin %} (admin){% endif %}{{ ', ' if not loop.last }}{% endfor %}</p>
+{% endif %}
+<p class="note">{{ icon('lock', 14) }} <b>Disable</b> locks someone out of the map, radio, video and web right away (lost phone?); <b>Enable</b> gives their old password back (or a new one, if they had picked their own).
+  Take links down once people have joined.</p>
 {% endblock %}

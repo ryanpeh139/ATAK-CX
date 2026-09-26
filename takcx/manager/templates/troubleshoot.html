@@ -1,45 +1,48 @@
 {% extends "base.html" %}
 {% block title %}Troubleshoot{% endblock %}
+{% macro feed(items) %}
+<ul class="list">{% for e in items %}
+  <li><span class="dot {{ e.kind }}"></span><span class="grow">{{ e.text }}<small title="{{ e.time | stamp }}">{{ e.time | ago }}</small></span>
+    <span class="pill {{ e.kind }}">{{ 'ok' if e.kind == 'ok' else 'refused' }}</span></li>
+{% endfor %}</ul>
+{% endmacro %}
 {% block body %}
-<h1>Troubleshoot</h1>
+<div class="pagehead">
+  <h1>{{ icon('troubleshoot', 22) }}Troubleshoot</h1>
+  <form method="post" action="{{ url_for('m.doctor') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">{{ icon('ok') }}Run full health check</button></form>
+</div>
 <div class="grid">
   <div class="card">
-    <h2>Radio logins (Mumla / Mumble)</h2>
-    {% if radio %}<table>{% for e in radio %}
-      <tr><td class="muted" style="white-space:nowrap;font-size:.85em">{{ e.time }}</td>
-          <td><span class="pill {{ e.kind }}">{{ 'ok' if e.kind == 'ok' else 'refused' }}</span> {{ e.text }}</td></tr>
-    {% endfor %}</table>
-    {% else %}<p class="muted">No radio login attempts yet.</p>{% endif %}
-    <p class="muted" style="font-size:.85em">In the radio app the username must be the takcx username (lowercase) and the password is the one under People → Show login. No entry at all when someone tries? The radio's login link may be down: restart <b>mumble-server</b> below.</p>
+    <h2>{{ icon('radio', 15) }}Radio logins (Mumla / Mumble)</h2>
+    {% if radio %}{{ feed(radio) }}{% else %}<p class="muted">No radio login attempts yet.</p>{% endif %}
+    <p class="note">In the radio app the username must be the takcx username (lowercase) and the password is the one under People → Show login. No entry at all when someone tries? The radio's login link may be down: restart <b>Team radio</b> below.</p>
   </div>
   <div class="card">
-    <h2>TAK connections (ATAK / iTAK / WinTAK)</h2>
-    {% if tak %}<table>{% for e in tak %}
-      <tr><td class="muted" style="white-space:nowrap;font-size:.85em">{{ e.time }}</td>
-          <td><span class="pill {{ e.kind }}">{{ 'ok' if e.kind == 'ok' else 'refused' }}</span> {{ e.text }}</td></tr>
-    {% endfor %}</table>
-    {% else %}<p class="muted">No TAK connections yet. If a phone can't connect and nothing shows here, it isn't reaching the server: check port forwarding (8089) and the address.</p>{% endif %}
+    <h2>{{ icon('phone', 15) }}TAK connections (ATAK / iTAK / WinTAK)</h2>
+    {% if tak %}{{ feed(tak) }}{% else %}<p class="muted">No TAK connections yet. If a phone can't connect and nothing shows here, it isn't reaching the server: check port forwarding (8089) and the address.</p>{% endif %}
   </div>
 </div>
-<div class="card">
-  <h2>Services</h2>
-  <div class="scroll"><table>
+<div class="card" style="margin-top:16px">
+  <h2>{{ icon('restart', 15) }}Services</h2>
+  <ul class="list">
   {% for svc, state in states %}
-    <tr><td>{{ svc }}</td><td><span class="pill {{ 'ok' if state == 'active' else 'bad' }}">{{ state }}</span></td>
-      <td><form class="inline" method="post" action="{{ url_for('m.restart_service') }}">
+    <li><span class="dot {{ 'ok' if state == 'active' else 'off' if state == 'unknown' else 'bad' }}"></span>
+      <span class="grow">{{ service_labels.get(svc, svc) }}<small class="mono">{{ svc }}</small></span>
+      <span class="pill {{ 'ok' if state == 'active' else 'off' if state == 'unknown' else 'bad' }}">{{ 'running' if state == 'active' else state }}</span>
+      <form class="inline" method="post" action="{{ url_for('m.restart_service') }}">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="service" value="{{ svc }}">
         <input type="hidden" name="back" value="{{ url_for('m.troubleshoot') }}">
-        <button class="small {{ 'alt' if state == 'active' else '' }}">Restart</button></form></td></tr>
+        <button class="small {{ 'alt' if state == 'active' else '' }}">{{ icon('restart', 15) }}Restart</button></form></li>
   {% endfor %}
-  </table></div>
-  <p class="muted" style="font-size:.85em">Restarting OpenTAKServer, TAK connections or the radio briefly disconnects everyone; apps reconnect on their own.</p>
+  </ul>
+  <p class="note">Restarting OpenTAKServer, TAK connections or the radio briefly disconnects everyone; apps reconnect on their own.</p>
 </div>
 <div class="card">
-  <h2>Recent errors</h2>
-  {% if errors %}<div class="scroll"><table>{% for e in errors %}
-    <tr><td class="muted" style="white-space:nowrap;font-size:.85em">{{ e.time }}</td><td class="muted">{{ e.where }}</td><td style="font-size:.9em">{{ e.text }}</td></tr>
-  {% endfor %}</table></div>
-  {% else %}<p class="muted">No errors in the recent logs.</p>{% endif %}
-  <form method="post" action="{{ url_for('m.doctor') }}" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">Run full health check</button></form>
+  <h2>{{ icon('alert', 15) }}Recent errors</h2>
+  {% if errors %}<ul class="list">{% for e in errors %}
+    <li style="align-items:flex-start"><span class="dot bad" style="margin-top:7px"></span><span class="grow"><span class="mono small">{{ e.text }}</span>
+      <small>{{ e.where }} · <span title="{{ e.time | stamp }}">{{ e.time | ago }}</span></small></span></li>
+  {% endfor %}</ul>
+  {% else %}<p class="muted">{{ icon('ok', 16) }} No errors in the recent logs.</p>{% endif %}
 </div>
 {% endblock %}

@@ -90,6 +90,22 @@ Both also drop live connections (the server's TAK listener restarts, and
 everyone else reconnects on their own within seconds). If Bob gets a new
 phone, `takcx enable bob` and send him the same package again.
 
+## Passwords
+
+Everyone gets a random password (on their welcome page and in `credentials.txt`). It's used
+for the **radio, web map and video**; ATAK itself logs in with a certificate, so no password
+change ever disconnects anyone's ATAK.
+
+- **Let people pick their own:** if the Manager is on, they open
+  `https://<your-server>/manage/password` (the link is on their welcome page), type their
+  username, current password and a new one. takcx then keeps **no copy** of it: it disappears
+  from their welcome page, `credentials.txt` and the Manager.
+- **Someone forgot theirs:** `takcx reset-password bob` (or People → More → Make a new password)
+  gives them a new random one.
+- **Set one for someone over SSH:** `takcx set-password bob` (asks for it twice).
+- If someone who picked their own password is disabled and enabled again, they get a new random
+  password (takcx never kept theirs); they can change it again afterwards.
+
 ## Changing things later
 
 Edit `~/takcx/team.conf` or the files in `maps/`, then:

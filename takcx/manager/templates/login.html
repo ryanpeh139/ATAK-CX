@@ -1,26 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Log in{% endblock %}
 {% block body %}
-<div class="card" style="max-width:380px;margin:40px auto">
-  <h1>{{ team.get('TEAM_NAME', 'ATAK-CX') }} Manager</h1>
+<div style="max-width:380px;margin:6vh auto 0">
+  <div style="text-align:center;margin-bottom:22px">
+    <div style="display:inline-block">{{ emblem(team_name, 72) }}</div>
+    <h1 style="justify-content:center;margin-top:12px">{{ team_name }}</h1>
+    <div class="muted" style="letter-spacing:2px;text-transform:uppercase;font-size:.75rem;font-weight:700">Manager</div>
+  </div>
+  <div class="card" style="padding:22px">
   {% if two_factor %}
-  <p class="muted">Enter the 6-digit code from your authenticator app.</p>
+  <p class="muted">{{ icon('lock', 15) }} Enter the 6-digit code from your authenticator app.</p>
   <form method="post" action="{{ url_for('m.two_factor') }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="code">Code</label>
-    <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" autofocus required>
-    <p><button>Continue</button></p>
+    <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" class="mono" style="font-size:1.3rem;letter-spacing:6px;text-align:center" autofocus required>
+    <button style="width:100%;justify-content:center;margin-top:16px">Continue</button>
   </form>
   {% else %}
-  <p class="muted">Log in with an OpenTAKServer administrator account.</p>
   <form method="post" action="{{ url_for('m.login') }}">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="u">Username</label>
-    <input type="text" id="u" name="username" autocomplete="username" autofocus required>
-    <label for="p" style="margin-top:10px">Password</label>
+    <input type="text" id="u" name="username" autocomplete="username" autocapitalize="none" autofocus required>
+    <label for="p" style="margin-top:12px">Password</label>
     <input type="password" id="p" name="password" autocomplete="current-password" required>
-    <p><button>Log in</button></p>
+    <button style="width:100%;justify-content:center;margin-top:18px">{{ icon('lock', 16) }}Log in</button>
   </form>
   {% endif %}
+  </div>
+  <p class="note" style="text-align:center">Server administrators only. On the team?<br><a href="{{ url_for('m.change_password') }}">Change your own password</a></p>
 </div>
 {% endblock %}

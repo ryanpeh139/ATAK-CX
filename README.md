@@ -73,6 +73,7 @@ It opens a page with the right download and steps for their device.
 | `takcx list` | Everyone, and whether they're enabled |
 | `takcx share NAME` / `takcx unshare NAME` | Publish or take down their download link |
 | `takcx disable NAME` / `takcx enable NAME` | Lock someone out of map, radio, video and web (lost phone?) or let them back in |
+| `takcx reset-password NAME` | Give someone a new random password (they can pick their own at `/manage/password`) |
 | `takcx remove NAME` | Delete someone for good |
 | `takcx rebuild --all` | Remake everyone's packages after editing `~/takcx/team.conf` or `maps/` |
 | `takcx maps` | A maps-only package: no login in it, safe to share with anyone |

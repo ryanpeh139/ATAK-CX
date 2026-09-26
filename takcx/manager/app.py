@@ -13,6 +13,7 @@ can only restart a short, fixed list of services (see setup/enable-manager.sh).
 
 import collections
 import datetime
+import email.utils
 import glob
 import html
 import http.client
@@ -28,6 +29,7 @@ import uuid
 
 from flask import (Blueprint, Flask, abort, flash, redirect, render_template, request,
                    send_file, session, url_for)
+from markupsafe import Markup
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.insert(0, os.path.join(REPO_DIR, "takcx"))
@@ -137,7 +139,7 @@ def csrf_token():
 
 @bp.before_request
 def require_login():
-    if request.endpoint in ("m.login", "m.two_factor"):
+    if request.endpoint in ("m.login", "m.two_factor", "m.change_password"):
         pass
     elif not session.get("user"):
         return redirect(url_for("m.login"))
@@ -151,7 +153,8 @@ def require_login():
 def template_globals():
     team = T.read_shell_conf(os.path.join(T.TAKCX_HOME, "team.conf"))
     return {"csrf": csrf_token(), "user": session.get("user"), "team": team,
-            "running_jobs": sum(1 for j in JOBS.values() if j["status"] == "running")}
+            "running_jobs": sum(1 for j in JOBS.values() if j["status"] == "running"),
+            "restartable": RESTARTABLE, "service_labels": SERVICE_LABELS}
 
 
 @bp.route("/login", methods=["GET", "POST"])
@@ -215,6 +218,65 @@ def finish_login(ots, ip):
     return redirect(url_for("m.status"))
 
 
+@bp.route("/password", methods=["GET", "POST"])
+def change_password():
+    """Anyone on the team (not just admins) can pick their own password here."""
+    if request.method == "GET":
+        return render_template("password.html")
+    f = request.form
+    username = f.get("username", "").strip().lower()
+    current, new = f.get("current", ""), f.get("new", "")
+    page = lambda code, **kw: (render_template("password.html", username=username, **kw), code)  # noqa: E731
+    ip = client_ip()
+    if locked_out(ip):
+        flash("Too many failed attempts. Wait 5 minutes and try again.", "bad")
+        return page(429)
+    if new != f.get("again", ""):
+        flash("The two new passwords don't match.", "bad")
+        return page(400)
+    problem = T.check_new_password(username, new)
+    if problem:
+        flash(problem, "bad")
+        return page(400)
+    if new == current:
+        flash("That's the password you have now. Pick a new one.", "bad")
+        return page(400)
+    try:
+        ots = OtsLogin()
+        result = ots.login(username, current) if T.USERNAME_RE.match(username) else "bad"
+    except T.TakcxError as e:
+        flash(str(e), "bad")
+        return page(503)
+    if result == "2fa":
+        code = re.sub(r"\D", "", f.get("code", ""))
+        if not code:
+            flash("Your account uses two-factor login. Enter the code from your authenticator app too.", "warn")
+            return page(401, need_code=True)
+        result = "ok" if ots.two_factor(code) else "bad"
+    status, me = ots.api.request("GET", "/api/me") if result == "ok" else (0, None)
+    if not isinstance(me, dict) or me.get("username") != username:
+        _failures[ip].append(time.time())
+        flash("Wrong username, password or code.", "bad")
+        return page(401, need_code=bool(f.get("code")))
+    profile = T.load_profile(username)
+    admin_user = T.read_shell_conf(os.path.join(T.TAKCX_HOME, "admin.conf")).get("OTS_ADMIN_USER", "administrator")
+    if not profile or profile.get("type") == "drone" or username == admin_user:
+        flash("This account's password can't be changed here. Ask your server admin.", "bad")
+        return page(403)
+    env = {**os.environ, "TAKCX_NO_QR": "1"}
+    try:
+        r = subprocess.run(takcx("set-password", username), input=new + "\n", capture_output=True,
+                           text=True, timeout=180, env=env, cwd=REPO_DIR)
+    except subprocess.TimeoutExpired:
+        r = None
+    if not r or r.returncode != 0:
+        lines = ((r.stdout + r.stderr).strip().splitlines() if r else []) or ["It took too long."]
+        flash(f"Couldn't change it: {lines[-1].removeprefix('Error: ')}", "bad")
+        return page(500)
+    _failures.pop(ip, None)
+    return render_template("password.html", done=True, username=username)
+
+
 @bp.route("/logout", methods=["POST"])
 def logout():
     session.clear()
@@ -231,7 +293,7 @@ def start_job(title, commands, back):
     """Run commands (lists of args, no shell) one after another in the background."""
     job_id = uuid.uuid4().hex[:12]
     job = {"id": job_id, "title": title, "status": "running", "output": "", "back": back,
-           "started": datetime.datetime.now().strftime("%H:%M:%S"), "user": session.get("user")}
+           "started": datetime.datetime.now(), "finished": None, "user": session.get("user")}
     with _jobs_lock:
         JOBS[job_id] = job
         while len(JOBS) > 30:
@@ -252,6 +314,7 @@ def start_job(title, commands, back):
                 ok = False
             if not ok:
                 break
+        job["finished"] = datetime.datetime.now()
         job["status"] = "done" if ok else "failed"
 
     threading.Thread(target=run, daemon=True).start()
@@ -321,15 +384,36 @@ def status():
     rows = [(label, name, service_state(name)) for label, name in services]
     disk = shutil.disk_usage("/")
     backups = sorted(glob.glob(os.path.join(BACKUP_DIR, "takcx-backup-*.tar.gz")), key=os.path.getmtime)
-    last_backup = (datetime.datetime.fromtimestamp(os.path.getmtime(backups[-1])).strftime("%Y-%m-%d %H:%M")
-                   if backups else None)
+    last_backup = datetime.datetime.fromtimestamp(os.path.getmtime(backups[-1])) if backups else None
     radio_link = T.radio_link_state() if flag("RADIO_ENABLED") else None
+    ots_ok = ots_healthy()
+    issues = []
+    if not ots_ok:
+        issues.append(("OpenTAKServer isn't responding", "opentakserver"))
+    issues += [(f"{label} is {state}", name) for label, name, state in rows
+               if state not in ("active", "unknown")]
+    if radio_link is False:
+        issues.append(("Radio logins aren't linked to accounts (nobody can join the radio)", "mumble-server"))
+    if disk.free < 3 * 1024 ** 3:
+        issues.append((f"Low disk space: {mb(disk.free)} free", None))
+    if not backups:
+        issues.append(("No backups yet", None))
+    elif time.time() - os.path.getmtime(backups[-1]) > 3 * 86400:
+        issues.append(("Last backup is more than 3 days old", None))
+    tiles = {"people": None, "online": None, "drones": None}
+    try:
+        people = people_rows()
+        tiles = {"people": sum(1 for r in people if r["managed"] and not r["drone"]),
+                 "online": sum(1 for r in people if r["online"]),
+                 "drones": sum(1 for r in people if r["drone"])}
+    except T.TakcxError:
+        pass
     addons = [("Team radio", flag("RADIO_ENABLED")), ("Live video", flag("VIDEO_ENABLED")),
               ("Emergency alerts", flag("ALERTS_ENABLED")), ("Public-land maps", flag("PUBLICLAND_ENABLED")),
               ("Aircraft", flag("AIRCRAFT_ENABLED")), ("Elevation data", bool(team.get("ELEVATION_URL"))),
               ("HTTPS certificate", flag("HTTPS_ENABLED"))]
-    return render_template("status.html", rows=rows, ots_ok=ots_healthy(), disk=disk,
-                           last_backup=last_backup, radio_link=radio_link, addons=addons)
+    return render_template("status.html", rows=rows, ots_ok=ots_ok, disk=disk, issues=issues,
+                           tiles=tiles, last_backup=last_backup, radio_link=radio_link, addons=addons)
 
 
 @bp.route("/doctor", methods=["POST"])
@@ -337,6 +421,10 @@ def doctor():
     return start_job("Full health check", [takcx("doctor")], url_for("m.status"))
 
 
+SERVICE_LABELS = {"opentakserver": "OpenTAKServer", "cot_parser": "Message processing",
+                  "eud_handler_ssl": "TAK connections (TLS)", "eud_handler": "TAK connections (plain)",
+                  "mumble-server": "Team radio", "mediamtx": "Video server", "takcx-alerts": "Emergency alerts",
+                  "takcx-tiles": "Public-land maps", "nginx": "Web server"}
 RESTARTABLE = ["opentakserver", "cot_parser", "eud_handler_ssl", "eud_handler", "mumble-server",
                "mediamtx", "takcx-alerts", "takcx-tiles", "nginx"]
 
@@ -423,8 +511,24 @@ def update():
 
 # --------------------------------------------------------------------------- people & drones
 
+def devices(ots):
+    """TAK devices OpenTAKServer has seen, with their connection status."""
+    out, page = [], 1
+    while page <= 5:
+        data = ots.call("GET", f"/api/eud?per_page=100&page={page}")
+        out += data.get("results", [])
+        if page >= data.get("total_pages", 1):
+            break
+        page += 1
+    return out
+
+
 def people_rows():
     ots = T.connect()
+    try:
+        devs = devices(ots)
+    except T.TakcxError:
+        devs = []
     rows = []
     for u in sorted(ots.users(), key=lambda u: u["username"]):
         p = T.load_profile(u["username"]) or {}
@@ -433,9 +537,15 @@ def people_rows():
         link = None
         if os.path.exists(token_file):
             link = T.share_url(T.load_team(), open(token_file).read().strip())
+        mine = [d for d in devs if d.get("username") == u["username"]]
+        seen = [parse_time(d.get("last_event_time")) for d in mine]
+        seen = [t for t in seen if t]
         rows.append({"username": u["username"], "active": u.get("active"), "profile": p,
                      "admin": "administrator" in roles, "drone": p.get("type") == "drone",
                      "managed": bool(p), "link": link,
+                     "online": any(d.get("last_status") == "Connected" for d in mine),
+                     "last_seen": max(seen) if seen else None,
+                     "devices": [d.get("platform") or "device" for d in mine],
                      "last": u.get("current_login_at") or ""})
     return rows
 
@@ -656,7 +766,7 @@ def settings():
 def backup_files():
     files = sorted(glob.glob(os.path.join(BACKUP_DIR, "takcx-backup-*.tar.gz")), key=os.path.getmtime, reverse=True)
     return [{"name": os.path.basename(p), "size": os.path.getsize(p),
-             "when": datetime.datetime.fromtimestamp(os.path.getmtime(p)).strftime("%Y-%m-%d %H:%M")} for p in files]
+             "when": datetime.datetime.fromtimestamp(os.path.getmtime(p))} for p in files]
 
 
 @bp.route("/backups")
@@ -677,6 +787,150 @@ def backups_download(name):
 
 
 # --------------------------------------------------------------------------- template helpers
+
+TEAM_COLOR_HEX = {"White": "#f4f4f4", "Yellow": "#ffe14d", "Orange": "#ff9a2e", "Magenta": "#ff4fd8",
+                  "Red": "#ff4d4d", "Maroon": "#9c2b3a", "Purple": "#a45cff", "Dark Blue": "#3b5bdb",
+                  "Blue": "#4d8dff", "Cyan": "#3fe0f0", "Teal": "#20b2aa", "Green": "#5ee05e",
+                  "Dark Green": "#2f8f3f", "Brown": "#a8703f"}
+
+
+def parse_time(value):
+    """OTS/HTTP dates, ISO times and our own log times -> aware datetime (or None)."""
+    if not value:
+        return None
+    if isinstance(value, datetime.datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+        dt = None
+        try:
+            dt = email.utils.parsedate_to_datetime(text)
+        except (TypeError, ValueError, IndexError):
+            pass
+        if dt is None:
+            try:
+                dt = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+    if dt.tzinfo is None:
+        dt = dt.astimezone()  # naive = this server's local time (log files, backups)
+    return dt
+
+
+@bp.app_template_filter("ago")
+def ago(value):
+    dt = parse_time(value)
+    if not dt:
+        return "never" if not value else str(value)
+    secs = (datetime.datetime.now(datetime.timezone.utc) - dt).total_seconds()
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return f"{int(secs // 60)} min ago"
+    if secs < 86400:
+        return f"{int(secs // 3600)} h ago"
+    if secs < 2 * 86400:
+        return "yesterday"
+    if secs < 30 * 86400:
+        return f"{int(secs // 86400)} days ago"
+    return dt.strftime("%b %d, %Y")
+
+
+@bp.app_template_filter("stamp")
+def stamp(value):
+    dt = parse_time(value)
+    return dt.astimezone().strftime("%a %b %d, %H:%M") if dt else ""
+
+
+@bp.app_template_filter("team_hex")
+def team_hex(color):
+    return TEAM_COLOR_HEX.get(color or "", "#8b998e")
+
+
+# Line icons (24x24, drawn with currentColor), inlined so the page loads nothing from outside.
+ICONS = {
+    "status": '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    "people": '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>'
+              '<path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    "drone": '<circle cx="12" cy="12" r="2.5"/><path d="M10 10 7 7M14 10l3-3M10 14l-3 3M14 14l3 3"/>'
+             '<circle cx="5.5" cy="5.5" r="2.5"/><circle cx="18.5" cy="5.5" r="2.5"/>'
+             '<circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+    "addons": '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/>'
+              '<polyline points="2 12 12 17 22 12"/>',
+    "plugins": '<path d="M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0V8zM12 17v5"/>',
+    "settings": '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+    "backups": '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/>'
+               '<line x1="10" y1="12" x2="14" y2="12"/>',
+    "troubleshoot": '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94'
+                    'l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    "jobs": '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+    "logout": '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/>'
+              '<line x1="21" y1="12" x2="9" y2="12"/>',
+    "ok": '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+    "alert": '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>'
+             '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    "restart": '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+    "more": '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+    "link": '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
+            '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    "key": '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
+    "radio": '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/>'
+             '<line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+    "video": '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+    "bell": '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    "map": '<polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/>'
+           '<line x1="16" y1="6" x2="16" y2="22"/>',
+    "mountain": '<path d="m3 20 6.5-12 4 7 2.5-4L21 20z"/>',
+    "plane": '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5'
+             'l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2'
+             'c.4-.3.6-.7.5-1.2z"/>',
+    "shield": '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    "plus": '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+    "download": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/>'
+                '<line x1="12" y1="15" x2="12" y2="3"/>',
+    "upload": '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/>'
+              '<line x1="12" y1="3" x2="12" y2="15"/>',
+    "menu": '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/>'
+            '<line x1="3" y1="18" x2="21" y2="18"/>',
+    "globe": '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>'
+             '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+    "disk": '<line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6'
+            'l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/>',
+    "phone": '<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+    "trash": '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4'
+             'a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    "lock": '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    "back": '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+}
+
+
+@bp.app_template_global()
+def icon(name, size=18):
+    return Markup(f'<svg class="ico" width="{int(size)}" height="{int(size)}" viewBox="0 0 24 24" fill="none" '
+                  'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+                  f'aria-hidden="true">{ICONS.get(name, "")}</svg>')
+
+
+@bp.app_template_global()
+def emblem(team_name, size=40):
+    """The team badge: a shield with the team's initials."""
+    text = html.escape(initials(team_name))
+    font = 15 if len(text) < 3 else 12
+    return Markup(f'<svg class="emblem" width="{int(size)}" height="{int(size * 1.1)}" viewBox="0 0 40 44" '
+                  'aria-hidden="true"><path d="M20 2 37 8v13c0 10.5-7.4 17.6-17 21C10.4 38.6 3 31.5 3 21V8z" '
+                  'fill="#18231b" stroke="currentColor" stroke-width="2.2"/>'
+                  '<path d="M20 7 32 11.3v9.4c0 7.6-5.2 12.8-12 15.5-6.8-2.7-12-7.9-12-15.5v-9.4z" '
+                  'fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/>'
+                  f'<text x="20" y="{25 if font == 15 else 24.5}" text-anchor="middle" font-size="{font}" '
+                  'font-weight="800" letter-spacing=".5" fill="currentColor" '
+                  f'font-family="ui-monospace,Menlo,Consolas,monospace">{text}</text></svg>')
+
+
+@bp.app_template_global()
+def initials(name):
+    words = re.findall(r"[A-Za-z0-9]+", name or "")
+    return ("".join(w[0] for w in words[:2]) or "CX").upper()
+
 
 @bp.app_template_filter("mb")
 def mb(n):

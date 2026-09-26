@@ -19,6 +19,12 @@ Click anyone's name (or **Show login**) to see their username, password and welc
 link with its QR code, or give them a **new password**. Their ATAK stays connected
 because it uses a certificate; only the radio, web map and video use the password.
 
+**Anyone on the team can change their own password** at `https://<your-server>/manage/password`
+(no admin needed; the link is on everyone's welcome page and the Manager's login page). They
+enter their current password (and their two-factor code if they turned it on). Once
+they've picked their own, the Manager shows "picked their own" instead of the password. If they
+forget it, use **Make a new password**.
+
 **Settings → Update ATAK-CX** pulls the latest version and restarts the Manager. If an
 update adds a new add-on or changes permissions, its notes will say which setup script
 to re-run over SSH.
@@ -69,7 +75,10 @@ password. ATAK, the radio and video aren't affected.
 ## Security notes
 
 - Only OpenTAKServer **administrator** accounts can log in. Buddies can't.
-- 5 wrong passwords or codes from one address → locked out for 5 minutes.
+- 5 wrong passwords or codes from one address → locked out for 5 minutes (the
+  change-password page counts too).
+- The change-password page only changes accounts made with takcx, never the built-in
+  `administrator` account or drone logins.
 - Sessions last 12 hours; the cookie is HTTPS-only and can't be read by scripts
   or used by other sites. Every form carries an anti-forgery token.
 - The page loads no outside scripts or fonts, and can't be embedded in another site.

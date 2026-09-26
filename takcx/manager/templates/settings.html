@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block body %}
-<h1>Settings</h1>
+<div class="pagehead"><h1>{{ icon('settings', 22) }}Settings</h1></div>
 <form method="post" action="{{ url_for('m.settings') }}">
 <input type="hidden" name="csrf" value="{{ csrf }}">
 <div class="card">
-  <h2>Team</h2>
+  <h2>{{ icon('people', 15) }}Team</h2>
   <div class="row">
     <div class="field"><label>Team name (shown in ATAK)</label><input type="text" name="TEAM_NAME" value="{{ team.get('TEAM_NAME', '') }}" maxlength="40" required></div>
     <div class="field"><label>Server address</label><input type="text" value="{{ team.get('SERVER_ADDRESS', '') }}" disabled></div>
@@ -15,21 +15,21 @@
     <div class="field"><label>Default role</label><select name="DEFAULT_ROLE">{% for r in roles %}<option {{ 'selected' if r == team.get('DEFAULT_ROLE') }}>{{ r }}</option>{% endfor %}</select></div>
     <div class="field"><label>Coordinate format</label><select name="COORD_FORMAT"><option value="">ATAK default (MGRS)</option>{% for c in coords %}<option {{ 'selected' if c == team.get('COORD_FORMAT') }}>{{ c }}</option>{% endfor %}</select></div>
   </div>
-  <p><label class="check"><input type="checkbox" name="INCLUDE_MAPS" {{ 'checked' if team.get('INCLUDE_MAPS', 'yes') == 'yes' }}> Put the team's maps in everyone's package</label></p>
-  <p class="muted" style="font-size:.85em">Changing these rebuilds everyone's files. People who already joined need to import their new package (re-share their link).
+  <p style="margin-top:14px"><label class="check"><input type="checkbox" name="INCLUDE_MAPS" {{ 'checked' if team.get('INCLUDE_MAPS', 'yes') == 'yes' }}> Put the team's maps in everyone's package</label></p>
+  <p class="note">Changing these rebuilds everyone's files. People who already joined need to import their new package (re-share their link).
   The server address can only be changed over SSH, because everyone needs new files afterwards.</p>
 </div>
 {% if team.get('RADIO_ENABLED') == 'yes' %}
 <div class="card">
-  <h2>Radio channels</h2>
+  <h2>{{ icon('radio', 15) }}Radio channels</h2>
   <label>Comma-separated; people start in the first one</label>
   <input type="text" name="RADIO_CHANNELS" value="{{ team.get('RADIO_CHANNELS', '') }}">
 </div>
 {% endif %}
 {% if team.get('ALERTS_ENABLED') == 'yes' %}
 <div class="card">
-  <h2>Alert extras</h2>
-  <p class="muted" style="font-size:.9em">Saved values aren't shown. Leave a box empty to keep what's there.</p>
+  <h2>{{ icon('bell', 15) }}Alert extras</h2>
+  <p class="note" style="margin:0 0 12px">Saved values aren't shown. Leave a box empty to keep what's there.</p>
   {% for key, label in [('DISCORD_WEBHOOK', 'Discord webhook URL'), ('TELEGRAM_BOT_TOKEN', 'Telegram bot token'), ('TELEGRAM_CHAT_ID', 'Telegram chat ID')] %}
   <div class="row" style="margin-bottom:8px">
     <div class="field"><label>{{ label }} {% if secrets_set[key] %}<span class="pill ok">set</span>{% endif %}</label><input type="password" name="{{ key }}" autocomplete="off"></div>
@@ -38,11 +38,11 @@
   {% endfor %}
 </div>
 {% endif %}
-<p><button>Save</button></p>
+<p><button>{{ icon('ok', 16) }}Save</button></p>
 </form>
 <div class="card">
-  <h2>Update ATAK-CX</h2>
-  <p class="muted">Installed version: {{ version or 'unknown' }}. Updating downloads the latest ATAK-CX and restarts this page (it comes back in a few seconds). Updates never change your team, people or settings.</p>
-  <form method="post" action="{{ url_for('m.update') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">Update now</button></form>
+  <h2>{{ icon('download', 15) }}Update ATAK-CX</h2>
+  <p class="muted">Installed version: <span class="mono">{{ version or 'unknown' }}</span>. Updating downloads the latest ATAK-CX and restarts this page (it comes back in a few seconds). Updates never change your team, people or settings.</p>
+  <form method="post" action="{{ url_for('m.update') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">{{ icon('download', 16) }}Update now</button></form>
 </div>
 {% endblock %}

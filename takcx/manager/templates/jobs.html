@@ -2,14 +2,17 @@
 {% block head %}{% if running_jobs %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block title %}Jobs{% endblock %}
 {% block body %}
-<h1>Recent jobs</h1>
-<div class="card scroll">
+<div class="pagehead"><h1>{{ icon('jobs', 22) }}Recent jobs</h1></div>
+<p class="sub">Everything you do here runs as a job. Open one to see what it did.</p>
+<div class="card">
 {% if jobs %}
-<table><tr><th>Started</th><th>Job</th><th>By</th><th>Status</th></tr>
+<ul class="list">
 {% for j in jobs %}
-<tr><td>{{ j.started }}</td><td><a href="{{ url_for('m.job', job_id=j.id) }}">{{ j.title }}</a></td><td>{{ j.user }}</td>
-<td><span class="pill {{ 'ok' if j.status == 'done' else 'bad' if j.status == 'failed' else 'warn' }}">{{ j.status }}</span></td></tr>
-{% endfor %}</table>
-{% else %}<p class="muted">Nothing yet. Actions you take here show up with their output.</p>{% endif %}
+  <li><span class="dot {{ 'ok' if j.status == 'done' else 'bad' if j.status == 'failed' else 'warn' }}"></span>
+    <span class="grow"><a href="{{ url_for('m.job', job_id=j.id) }}">{{ j.title }}</a><small>{{ j.user }} · <span title="{{ j.started | stamp }}">{{ j.started | ago }}</span></small></span>
+    <span class="pill {{ 'ok' if j.status == 'done' else 'bad' if j.status == 'failed' else 'warn' }}">{{ j.status }}</span></li>
+{% endfor %}
+</ul>
+{% else %}<div class="empty">{{ icon('jobs', 32) }}<p>Nothing yet. Actions you take here show up with their output.</p></div>{% endif %}
 </div>
 {% endblock %}
