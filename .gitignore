@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.takcx-bak
+# Never commit generated secrets or packages
+team.conf
+admin.conf
+buddies/
+*.p12
+*.zip

@@ -1,0 +1,32 @@
+# ATAK-CX team settings.
+#
+# install-server.sh copies this file to ~/takcx/team.conf and fills in the
+# blanks. Edit ~/takcx/team.conf any time, then run `takcx rebuild --all`
+# so everyone's connection package picks up the change.
+
+# Shown in ATAK as the server name and used in package file names.
+TEAM_NAME="CX"
+
+# How phones reach the server: a domain name (recommended, e.g. a free
+# DuckDNS name like mycrew.duckdns.org) or a public / ZeroTier IP address.
+SERVER_ADDRESS=""
+
+# Set to "yes" by setup/enable-https.sh once a Let's Encrypt certificate is
+# installed. Share links only look clean (no browser warning) when this is on.
+HTTPS_ENABLED="no"
+
+# Defaults for new buddies. Each can be overridden per person:
+#   takcx add bob --color Red --role Medic
+#
+# Team colors: White Yellow Orange Magenta Red Maroon Purple "Dark Blue"
+#              Blue Cyan Teal Green "Dark Green" Brown
+DEFAULT_TEAM_COLOR="Cyan"
+# Roles: "Team Member" "Team Lead" HQ Sniper Medic "Forward Observer" RTO K9
+DEFAULT_ROLE="Team Member"
+
+# Coordinate format shown in ATAK. Leave empty to keep ATAK's default (MGRS).
+# Options: MGRS DD DM DMS UTM
+COORD_FORMAT=""
+
+# Bundle the map sources in maps/ into every connection package.
+INCLUDE_MAPS="yes"
