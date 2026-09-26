@@ -19,7 +19,7 @@
   <table>
     <tr><th>Drone</th><th>Status</th><th>Setup page</th><th>Actions</th></tr>
     {% for r in rows %}
-    <tr><td><b>{{ r.username }}</b></td>
+    <tr><td><b><a href="{{ url_for('m.person_login', name=r.username) }}">{{ r.username }}</a></b></td>
       <td><span class="pill {{ 'ok' if r.active else 'bad' }}">{{ 'enabled' if r.active else 'disabled' }}</span></td>
       <td>{% if r.link %}<a href="{{ r.link }}">open</a>{% else %}<span class="muted">-</span>{% endif %}</td>
       <td><div class="actions">

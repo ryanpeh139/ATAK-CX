@@ -25,7 +25,7 @@
     <tr><th>User</th><th>Callsign</th><th>Color / role</th><th>Status</th><th>Link</th><th>Actions</th></tr>
     {% for r in rows %}
     <tr>
-      <td><b>{{ r.username }}</b>{% if r.admin %} <span class="pill warn">admin</span>{% endif %}
+      <td><b>{% if r.managed %}<a href="{{ url_for('m.person_login', name=r.username) }}">{{ r.username }}</a>{% else %}{{ r.username }}{% endif %}</b>{% if r.admin %} <span class="pill warn">admin</span>{% endif %}
           {% if r.last %}<br><span class="muted" style="font-size:.8em">last login {{ r.last }}</span>{% endif %}</td>
       <td>{{ r.profile.get('callsign', '-') }}</td>
       <td>{{ r.profile.get('color', '-') }}<br><span class="muted">{{ r.profile.get('role', '') }}</span></td>
@@ -34,6 +34,7 @@
       <td>
         {% if r.managed %}
         <div class="actions">
+          <a class="btn alt small" style="padding:3px 9px;font-size:.85em" href="{{ url_for('m.person_login', name=r.username) }}">Show login</a>
           {% for action, label in ([('unshare', 'Take link down')] if r.link else [('share', 'Make link')]) + [('disable', 'Disable') if r.active else ('enable', 'Enable'), ('rebuild', 'Rebuild')] %}
           <form class="inline" method="post" action="{{ url_for('m.person_action', name=r.username, action=action) }}">
             <input type="hidden" name="csrf" value="{{ csrf }}"><button class="small {{ 'danger' if action == 'disable' else 'alt' }}">{{ label }}</button></form>

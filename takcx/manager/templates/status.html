@@ -9,7 +9,10 @@
       <tr><td>OpenTAKServer API</td><td><span class="pill {{ 'ok' if ots_ok else 'bad' }}">{{ 'healthy' if ots_ok else 'not responding' }}</span></td></tr>
       {% for label, name, state in rows %}
       <tr><td>{{ label }} <span class="muted">({{ name }})</span></td>
-          <td><span class="pill {{ 'ok' if state == 'active' else 'bad' }}">{{ state }}</span></td></tr>
+          <td><span class="pill {{ 'ok' if state == 'active' else 'bad' }}">{{ state }}</span>
+          {% if state != 'active' %}<form class="inline" method="post" action="{{ url_for('m.restart_service') }}">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="service" value="{{ name }}">
+            <button class="small">Restart</button></form>{% endif %}</td></tr>
       {% endfor %}
       {% if radio_link is not none %}
       <tr><td>Radio logins linked</td><td><span class="pill {{ 'ok' if radio_link else 'bad' }}">{{ 'yes' if radio_link else 'no' }}</span></td></tr>

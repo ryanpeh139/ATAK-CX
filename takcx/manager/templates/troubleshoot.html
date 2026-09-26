@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Troubleshoot{% endblock %}
+{% block body %}
+<h1>Troubleshoot</h1>
+<div class="grid">
+  <div class="card">
+    <h2>Radio logins (Mumla / Mumble)</h2>
+    {% if radio %}<table>{% for e in radio %}
+      <tr><td class="muted" style="white-space:nowrap;font-size:.85em">{{ e.time }}</td>
+          <td><span class="pill {{ e.kind }}">{{ 'ok' if e.kind == 'ok' else 'refused' }}</span> {{ e.text }}</td></tr>
+    {% endfor %}</table>
+    {% else %}<p class="muted">No radio login attempts yet.</p>{% endif %}
+    <p class="muted" style="font-size:.85em">In the radio app the username must be the takcx username (lowercase) and the password is the one under People → Show login. No entry at all when someone tries? The radio's login link may be down: restart <b>mumble-server</b> below.</p>
+  </div>
+  <div class="card">
+    <h2>TAK connections (ATAK / iTAK / WinTAK)</h2>
+    {% if tak %}<table>{% for e in tak %}
+      <tr><td class="muted" style="white-space:nowrap;font-size:.85em">{{ e.time }}</td>
+          <td><span class="pill {{ e.kind }}">{{ 'ok' if e.kind == 'ok' else 'refused' }}</span> {{ e.text }}</td></tr>
+    {% endfor %}</table>
+    {% else %}<p class="muted">No TAK connections yet. If a phone can't connect and nothing shows here, it isn't reaching the server: check port forwarding (8089) and the address.</p>{% endif %}
+  </div>
+</div>
+<div class="card">
+  <h2>Services</h2>
+  <div class="scroll"><table>
+  {% for svc, state in states %}
+    <tr><td>{{ svc }}</td><td><span class="pill {{ 'ok' if state == 'active' else 'bad' }}">{{ state }}</span></td>
+      <td><form class="inline" method="post" action="{{ url_for('m.restart_service') }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="service" value="{{ svc }}">
+        <input type="hidden" name="back" value="{{ url_for('m.troubleshoot') }}">
+        <button class="small {{ 'alt' if state == 'active' else '' }}">Restart</button></form></td></tr>
+  {% endfor %}
+  </table></div>
+  <p class="muted" style="font-size:.85em">Restarting OpenTAKServer, TAK connections or the radio briefly disconnects everyone; apps reconnect on their own.</p>
+</div>
+<div class="card">
+  <h2>Recent errors</h2>
+  {% if errors %}<div class="scroll"><table>{% for e in errors %}
+    <tr><td class="muted" style="white-space:nowrap;font-size:.85em">{{ e.time }}</td><td class="muted">{{ e.where }}</td><td style="font-size:.9em">{{ e.text }}</td></tr>
+  {% endfor %}</table></div>
+  {% else %}<p class="muted">No errors in the recent logs.</p>{% endif %}
+  <form method="post" action="{{ url_for('m.doctor') }}" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">Run full health check</button></form>
+</div>
+{% endblock %}

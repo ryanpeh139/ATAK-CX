@@ -337,6 +337,90 @@ def doctor():
     return start_job("Full health check", [takcx("doctor")], url_for("m.status"))
 
 
+RESTARTABLE = ["opentakserver", "cot_parser", "eud_handler_ssl", "eud_handler", "mumble-server",
+               "mediamtx", "takcx-alerts", "takcx-tiles", "nginx"]
+
+
+@bp.route("/restart", methods=["POST"])
+def restart_service():
+    svc = request.form.get("service", "")
+    if svc not in RESTARTABLE:
+        abort(400)
+    return start_job(f"Restart {svc}", [["sudo", "-n", "systemctl", "restart", svc],
+                                        ["sleep", "5"], ["systemctl", "is-active", svc]],
+                     request.form.get("back") or url_for("m.status"))
+
+
+def log_tail(name, max_bytes=400_000):
+    """Last lines of an OpenTAKServer log in ~/ots/logs (readable without sudo)."""
+    path = os.path.join(T.OTS_DATA_FOLDER, "logs", name)
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - max_bytes))
+            return f.read().decode(errors="replace").splitlines()
+    except OSError:
+        return []
+
+
+LOG_TIME = re.compile(r"^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)")
+RADIO_EVENTS = [
+    (re.compile(r"Mumble auth: (\S+) has been authenticated"), "ok", "{} logged in"),
+    (re.compile(r"Mumble auth: User (\S+) not found"), "bad", "{}: no account with that username (check spelling, all lowercase)"),
+    (re.compile(r"Mumble auth: Bad password for (\S+)"), "bad", "{}: wrong password"),
+    (re.compile(r"Mumble auth: User (\S+) is deactivated"), "bad", "{}: account is disabled"),
+]
+TAK_EVENTS = [
+    (re.compile(r"(\S+) is ID'ed by cert"), "ok", "{} connected"),
+    (re.compile(r"Successful login from (\S+)"), "ok", "{} connected (password)"),
+    (re.compile(r"User (\S+) does not exist"), "bad", "{}: account doesn't exist (removed?)"),
+    (re.compile(r"User (\S+) is deactivated"), "bad", "{}: account is disabled"),
+    (re.compile(r"Wrong password for user (\S+)"), "bad", "{}: wrong password"),
+]
+
+
+def events(lines, patterns, limit=15):
+    out = []
+    for line in lines:
+        t = LOG_TIME.match(line)
+        if not t:
+            continue  # skip traceback / source-code lines that happen to contain the words
+        for rx, kind, text in patterns:
+            m = rx.search(line)
+            if m:
+                out.append({"time": t.group(1), "kind": kind, "text": text.format(m.group(1))})
+                break
+    return list(reversed(out[-limit:]))
+
+
+@bp.route("/troubleshoot")
+def troubleshoot():
+    radio = events(log_tail("opentakserver.log"), RADIO_EVENTS)
+    tak = events(log_tail("eud_handler_ssl.log"), TAK_EVENTS)
+    errors = []
+    for name in ("opentakserver.log", "cot_parser.log", "eud_handler_ssl.log"):
+        for line in log_tail(name, 200_000):
+            t = LOG_TIME.match(line)
+            if t and " - ERROR - " in line:
+                msg = line.split(" - ERROR - ", 1)[1][:300]
+                errors.append({"time": t.group(1), "where": name.replace(".log", ""), "text": msg})
+    errors = sorted(errors, key=lambda e: e["time"])[-15:][::-1]
+    states = [(svc, service_state(svc)) for svc in RESTARTABLE]
+    return render_template("troubleshoot.html", radio=radio, tak=tak, errors=errors, states=states)
+
+
+def git(*args):
+    r = subprocess.run(["git", "-C", REPO_DIR, *args], capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+@bp.route("/update", methods=["POST"])
+def update():
+    return start_job("Update ATAK-CX", [["git", "-C", REPO_DIR, "pull", "--ff-only"],
+                                        ["sudo", "-n", "systemctl", "restart", "takcx-manager"]],
+                     url_for("m.settings"))
+
+
 # --------------------------------------------------------------------------- people & drones
 
 def people_rows():
@@ -385,7 +469,8 @@ def people_add():
 
 
 PERSON_ACTIONS = {"share": "Publish link for", "unshare": "Take down link for", "disable": "Disable",
-                  "enable": "Enable", "rebuild": "Rebuild files for", "remove": "Remove"}
+                  "enable": "Enable", "rebuild": "Rebuild files for", "remove": "Remove",
+                  "reset-password": "New password for"}
 
 
 @bp.route("/people/<name>/<action>", methods=["POST"])
@@ -398,6 +483,18 @@ def person_action(name, action):
     args = [action, name] + (["-y"] if action == "remove" else [])
     back = url_for("m.drones") if request.form.get("from") == "drones" else url_for("m.people")
     return start_job(f"{PERSON_ACTIONS[action]} {name}", [takcx(*args)], back)
+
+
+@bp.route("/people/<name>/login")
+def person_login(name):
+    if not T.USERNAME_RE.match(name):
+        abort(404)
+    profile = T.load_profile(name) or abort(404)
+    team = T.load_team()
+    token_file = os.path.join(T.BUDDIES_DIR, name, "share_token")
+    link = T.share_url(team, open(token_file).read().strip()) if os.path.exists(token_file) else None
+    return render_template("person_login.html", name=name, profile=profile, link=link,
+                           link_qr=qr_svg(link) if link else "")
 
 
 @bp.route("/drones")
@@ -512,7 +609,8 @@ def settings():
     team = T.read_shell_conf(conf_path)
     if request.method == "GET":
         return render_template("settings.html", colors=T.TEAM_COLORS, roles=T.ROLES,
-                               coords=T.COORD_FORMATS, secrets_set={k: bool(team.get(k)) for k in SECRET_SETTINGS})
+                               coords=T.COORD_FORMATS, secrets_set={k: bool(team.get(k)) for k in SECRET_SETTINGS},
+                               version=git("log", "-1", "--format=%h, %cd", "--date=format:%Y-%m-%d %H:%M"))
     f = request.form
     new = {"TEAM_NAME": clean_value(f.get("TEAM_NAME", "")) or team.get("TEAM_NAME", "CX"),
            "DEFAULT_TEAM_COLOR": f.get("DEFAULT_TEAM_COLOR") if f.get("DEFAULT_TEAM_COLOR") in T.TEAM_COLORS else team.get("DEFAULT_TEAM_COLOR", "Cyan"),

@@ -70,6 +70,7 @@
     <a href="{{ url_for('m.plugins') }}" class="{{ 'on' if here == 'm.plugins' }}">Plugins</a>
     <a href="{{ url_for('m.settings') }}" class="{{ 'on' if here == 'm.settings' }}">Settings</a>
     <a href="{{ url_for('m.backups') }}" class="{{ 'on' if here == 'm.backups' }}">Backups</a>
+    <a href="{{ url_for('m.troubleshoot') }}" class="{{ 'on' if here == 'm.troubleshoot' }}">Troubleshoot</a>
     <a href="{{ url_for('m.jobs') }}" class="{{ 'on' if here in ('m.jobs', 'm.job') }}">Jobs{% if running_jobs %} ({{ running_jobs }}){% endif %}</a>
   </nav>
   <div class="who">{{ user }}

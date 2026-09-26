@@ -12,7 +12,16 @@ A web page for running your server without SSH:
 | **Plugins** | Upload an ATAK plugin (pushed to everyone), see and remove plugins |
 | **Settings** | Team name, default color/role, coordinate format, radio channels, Discord/Telegram for alerts |
 | **Backups** | Back up now, download backups |
+| **Troubleshoot** | Recent radio logins and TAK connections, each with the reason it was refused; restart buttons for every service; recent errors |
 | **Jobs** | Every action runs as a job; watch its output live |
+
+Click anyone's name (or **Show login**) to see their username, password and welcome-page
+link with its QR code, or give them a **new password**. Their ATAK stays connected
+because it uses a certificate; only the radio, web map and video use the password.
+
+**Settings → Update ATAK-CX** pulls the latest version and restarts the Manager. If an
+update adds a new add-on or changes permissions, its notes will say which setup script
+to re-run over SSH.
 
 ## Turn it on
 
@@ -49,8 +58,8 @@ password. ATAK, the radio and video aren't affected.
 
 - It runs the same `takcx` commands you'd type, so anything done here matches the
   command line and the rest of the docs.
-- It can **restart** a short, fixed list of services (TAK connections,
-  OpenTAKServer, radio, alerts) and read two logs. That list is in
+- It can **restart** a fixed list of ATAK-CX and OpenTAKServer services (and itself,
+  for updates) and read two logs. That list is in
   `/etc/sudoers.d/takcx-manager`. It **can't** install software or change system
   settings, so turning on radio, video, alerts, public-land maps or HTTPS still
   happens over SSH. The Add-ons page shows the exact command for each.

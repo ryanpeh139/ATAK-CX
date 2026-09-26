@@ -948,6 +948,38 @@ def cmd_enable(args):
               "Set a new one in the web admin (Users) and give it to them.")
 
 
+def cmd_reset_password(args):
+    """Give someone a new random password and update their files and link."""
+    team = load_team()
+    username = check_username(args.name)
+    ots = connect(team)
+    if not ots.find_user(username):
+        raise TakcxError(f"No account called {username}.")
+    password = new_password()
+    ots.call("POST", "/api/user/password/reset", {"username": username, "new_password": password})
+    profile = load_profile(username)
+    if profile is not None:
+        profile["password"] = password
+        if profile.get("type") == "drone":
+            write_drone_page(team, username, profile)
+        else:
+            build_packages(team, read_ots_config(), username, profile)
+            creds = os.path.join(BUDDIES_DIR, username, "credentials.txt")
+            with open(creds, "w") as f:
+                f.write(f"username: {username}\npassword: {password}\n"
+                        f"web map: https://{team['SERVER_ADDRESS']}/\n")
+            os.chmod(creds, 0o600)
+        token_file = os.path.join(BUDDIES_DIR, username, "share_token")
+        if os.path.exists(token_file):
+            publish(username, open(token_file).read().strip())
+    print(f"New password for {username}: {password}")
+    if profile and profile.get("type") == "drone":
+        print("The drone's stream address changed; re-copy it from its setup page.")
+    else:
+        print("Their ATAK connection isn't affected (it uses a certificate). Update it in the "
+              "radio app (Mumla/Mumble) and for the web map.")
+
+
 def cmd_remove(args):
     username = check_username(args.name)
     if not args.yes:
@@ -1530,6 +1562,9 @@ def main(argv=None):
     p.add_argument("name")
     p.add_argument("--no-kick", action="store_true", help="don't drop live connections")
     p.set_defaults(func=cmd_disable)
+    p = sub.add_parser("reset-password", help="give someone a new password (radio, web map, video)")
+    p.add_argument("name")
+    p.set_defaults(func=cmd_reset_password)
     p = sub.add_parser("remove", help="delete someone for good")
     p.add_argument("name")
     p.add_argument("-y", "--yes", action="store_true", help="don't ask for confirmation")

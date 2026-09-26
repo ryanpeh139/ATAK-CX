@@ -34,8 +34,15 @@ cat > "$tmp" <<EOF
 $ME ALL=(root) NOPASSWD: /usr/bin/systemctl restart eud_handler_ssl eud_handler, \\
   /usr/bin/systemctl restart eud_handler_ssl eud_handler mumble-server, \\
   /usr/bin/systemctl restart opentakserver, \\
+  /usr/bin/systemctl restart cot_parser, \\
+  /usr/bin/systemctl restart eud_handler_ssl, \\
+  /usr/bin/systemctl restart eud_handler, \\
   /usr/bin/systemctl restart mumble-server, \\
+  /usr/bin/systemctl restart mediamtx, \\
   /usr/bin/systemctl restart takcx-alerts, \\
+  /usr/bin/systemctl restart takcx-tiles, \\
+  /usr/bin/systemctl restart takcx-manager, \\
+  /usr/bin/systemctl restart nginx, \\
   /usr/sbin/ufw status, \\
   /usr/bin/journalctl -u mumble-server -n 300 --no-pager, \\
   /usr/bin/tail -n 300 /var/log/mumble-server/mumble-server.log

@@ -40,4 +40,9 @@
 {% endif %}
 <p><button>Save</button></p>
 </form>
+<div class="card">
+  <h2>Update ATAK-CX</h2>
+  <p class="muted">Installed version: {{ version or 'unknown' }}. Updating downloads the latest ATAK-CX and restarts this page (it comes back in a few seconds). Updates never change your team, people or settings.</p>
+  <form method="post" action="{{ url_for('m.update') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="alt">Update now</button></form>
+</div>
 {% endblock %}
