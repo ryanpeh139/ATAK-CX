@@ -64,6 +64,18 @@ sudo systemctl restart opentakserver eud_handler eud_handler_ssl cot_parser
 
 Logs are in `~/ots/logs/`. The installer log is `~/ots_installer.log`.
 
+## `takcx doctor` says cot_parser is inactive
+
+Its log (`~/ots/logs/cot_parser.log`) says `no exchange 'cot_parser'`: it started
+before OpenTAKServer was ready and gave up. Current installers add an automatic
+retry. To fix it by hand:
+
+```bash
+sudo mkdir -p /etc/systemd/system/cot_parser.service.d
+printf '[Unit]\nAfter=opentakserver.service\nStartLimitIntervalSec=0\n\n[Service]\nRestart=always\nRestartSec=10\n' | sudo tee /etc/systemd/system/cot_parser.service.d/takcx-retry.conf
+sudo systemctl daemon-reload && sudo systemctl restart cot_parser
+```
+
 ## takcx says "Admin login failed"
 
 Someone changed the admin password in the web UI. Put the new one in

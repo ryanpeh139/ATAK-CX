@@ -155,6 +155,15 @@ curl -fsS --max-time 3 "$OTS_HEALTH_URL" >/dev/null 2>&1 \
   || die "OpenTAKServer isn't responding. Check ~/ots_installer.log and ~/ots/logs/opentakserver.log"
 echo "OpenTAKServer is running."
 
+# cot_parser needs RabbitMQ exchanges that OpenTAKServer creates when it starts. If it
+# wins the race at boot it logs "no exchange 'cot_parser'" and stops, and messages stop
+# flowing. Start it after OpenTAKServer and keep retrying instead of giving up.
+sudo mkdir -p /etc/systemd/system/cot_parser.service.d
+printf '[Unit]\nAfter=opentakserver.service\nStartLimitIntervalSec=0\n\n[Service]\nRestart=always\nRestartSec=10\n' \
+  | sudo tee /etc/systemd/system/cot_parser.service.d/takcx-retry.conf >/dev/null
+sudo systemctl daemon-reload
+systemctl is-active --quiet cot_parser || sudo systemctl restart cot_parser
+
 # --------------------------------------------------------------------------- takcx
 step "Installing the takcx command"
 sudo apt-get install -y -qq qrencode >/dev/null
