@@ -60,26 +60,43 @@ Everyone's existing packages keep working because the certificate authority is t
 Share links aren't part of the backup; run `takcx share NAME` again for any you still need.
 If you use the team radio, run `./setup/enable-radio.sh` once more afterwards to relink it.
 
-## Upgrading OpenTAKServer
+## Updating (ATAK-CX, OpenTAKServer and the web map)
 
-Make a backup first, then use OpenTAKServer's updater:
-
-```bash
-./setup/backup.sh
-curl -L https://i.opentakserver.io/ubuntu_updater | bash - | tee ~/ots_upgrade.log
-```
-
-On a Raspberry Pi use `https://i.opentakserver.io/raspberry_pi_installer`
-instead. After upgrading run `takcx doctor`, and re-run `takcx share NAME` for
-any active links if the web folder was replaced.
-
-## Updating ATAK-CX
+One step updates everything: **Manager → Settings → Update everything**, or over SSH:
 
 ```bash
-cd ~/ATAK-CX && git pull
+cd ~/ATAK-CX && ./setup/update.sh          # --check just says what's out of date
 ```
 
-`takcx` is a link into this folder, so that's all it takes.
+In order, it:
+
+1. gets the newest ATAK-CX (`git pull`)
+2. if OpenTAKServer or its web map is out of date: **backs up** (`setup/backup.sh`),
+   updates OpenTAKServer from PyPI, upgrades its database, restarts it and waits
+   until it's healthy, then swaps in the newest web map
+3. rebuilds everyone's welcome pages and packages (links stay the same)
+4. runs `takcx doctor`, then restarts the Manager
+
+The output is saved to `~/takcx/last-update.log` and shown under Settings → Updates.
+
+**Why not OpenTAKServer's own updater?** It empties the web map's folder
+(`/var/www/html/opentakserver`), which is also where everyone's private links (`join/`)
+and downloads like elevation data (`files/`) live, and it stops to ask questions.
+`takcx/ots_update.py` does the same steps but keeps those folders. It doesn't touch nginx,
+Mumble, MediaMTX or your settings, and the systemd tweaks ATAK-CX adds live in drop-in
+files that survive updates.
+
+**If OpenTAKServer doesn't come back** after an update, the output says how to go back
+to the version you had:
+
+```bash
+~/.opentakserver_venv/bin/pip install opentakserver==OLD_VERSION
+# restore the database from the backup it made (see "Restore" above)
+sudo systemctl restart opentakserver
+```
+
+**If an update changes what the Manager may do** (new services it may restart, a new
+page in nginx), its notes will say to re-run `./setup/enable-manager.sh` once over SSH.
 
 ## Keep the OS patched
 

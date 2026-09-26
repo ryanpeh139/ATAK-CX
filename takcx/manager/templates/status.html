@@ -69,6 +69,7 @@
       <dl class="kv">
         <dt>Address</dt><dd class="mono">{{ team.get('SERVER_ADDRESS', '?') }}</dd>
         <dt>Web map</dt><dd><a href="https://{{ team.get('SERVER_ADDRESS', '') }}/">Open web map</a></dd>
+        {% if updates_waiting %}<dt>Updates</dt><dd><a class="pill warn" href="{{ url_for('m.settings') }}#updates">{{ icon('download', 13) }}available</a></dd>{% endif %}
         <dt>Last backup</dt><dd>{% if last_backup %}<span title="{{ last_backup | stamp }}">{{ last_backup | ago }}</span>{% else %}<span class="pill warn">none yet</span>{% endif %}
           · <a href="{{ url_for('m.backups') }}">Backups</a></dd>
       </dl>

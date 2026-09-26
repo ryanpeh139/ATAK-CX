@@ -25,9 +25,13 @@ enter their current password (and their two-factor code if they turned it on). O
 they've picked their own, the Manager shows "picked their own" instead of the password. If they
 forget it, use **Make a new password**.
 
-**Settings → Update ATAK-CX** pulls the latest version and restarts the Manager. If an
-update adds a new add-on or changes permissions, its notes will say which setup script
-to re-run over SSH.
+**Settings → Updates** shows what's installed and what's newer, for ATAK-CX,
+OpenTAKServer and the web map. **Update everything** backs up first, updates all three
+(keeping everyone's links and files), refreshes everyone's welcome pages, runs the health
+check and restarts the Manager. The log of the last update stays on that page. Details:
+[maintenance](maintenance.md#updating-atak-cx-opentakserver-and-the-web-map). If an update
+adds a new add-on or changes permissions, its notes will say which setup script to re-run
+over SSH.
 
 ## Turn it on
 

@@ -40,8 +40,8 @@ resend: `takcx rebuild NAME`, then `takcx share NAME`.
 ## Share link shows the OpenTAKServer login page instead of the join page
 
 The link must end in `/index.html`. Copy it exactly from `takcx share NAME`.
-If an OpenTAKServer upgrade wiped the web folder, run `takcx share NAME` again
-to republish (the link stays the same).
+If OpenTAKServer's own updater wiped the web folder, run `takcx rebuild --all` to
+republish everyone's links (they stay the same). `./setup/update.sh` never wipes them.
 
 ## Browser warns "not secure" on the share link
 

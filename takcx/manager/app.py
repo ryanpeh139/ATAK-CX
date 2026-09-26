@@ -34,6 +34,7 @@ from markupsafe import Markup
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 sys.path.insert(0, os.path.join(REPO_DIR, "takcx"))
 import takcx as T  # noqa: E402
+import ots_update as U  # noqa: E402
 
 PORT = int(os.environ.get("TAKCX_MANAGER_PORT", "8096"))
 TAKCX_PY = os.path.join(REPO_DIR, "takcx", "takcx.py")
@@ -336,7 +337,11 @@ def qr_svg(text):
 
 @bp.route("/jobs/<job_id>")
 def job(job_id):
-    j = JOBS.get(job_id) or abort(404)
+    j = JOBS.get(job_id)
+    if not j:
+        flash("That job isn't here any more: the Manager restarted (it does after an update; "
+              "see Settings → Updates for how it went).", "warn")
+        return redirect(url_for("m.jobs"))
     links = []
     for url in re.findall(r"(https://\S+/(?:join|files)/\S+|rtmp://\S+)", j["output"]):
         if url not in [u for u, _ in links]:
@@ -412,7 +417,11 @@ def status():
               ("Emergency alerts", flag("ALERTS_ENABLED")), ("Public-land maps", flag("PUBLICLAND_ENABLED")),
               ("Aircraft", flag("AIRCRAFT_ENABLED")), ("Elevation data", bool(team.get("ELEVATION_URL"))),
               ("HTTPS certificate", flag("HTTPS_ENABLED"))]
+    updates = update_status()
+    updates_waiting = bool(updates and (updates["server_behind"] or updates["ui_behind"]
+                                        or updates.get("atakcx_behind")))
     return render_template("status.html", rows=rows, ots_ok=ots_ok, disk=disk, issues=issues,
+                           updates_waiting=updates_waiting,
                            tiles=tiles, last_backup=last_backup, radio_link=radio_link, addons=addons)
 
 
@@ -502,10 +511,57 @@ def git(*args):
     return r.stdout.strip()
 
 
+_updates = {"at": 0, "data": None}
+_updates_lock = threading.Lock()
+
+
+def update_status(wait=False):
+    """What's installed vs. newest, checked at most hourly. Without wait, never blocks a page:
+    returns what's known and refreshes in the background."""
+    def refresh(blocking):
+        if not _updates_lock.acquire(blocking=blocking):
+            return  # a check is already running
+        try:
+            if time.time() - _updates["at"] > 3600:
+                data = U.status(timeout=5)
+                data["atakcx_behind"] = git_behind()
+                _updates.update(at=time.time(), data=data)
+        finally:
+            _updates_lock.release()
+    if time.time() - _updates["at"] > 3600:
+        if wait:
+            refresh(True)  # waits for a check that's already running instead of starting another
+        else:
+            threading.Thread(target=refresh, args=(False,), daemon=True).start()
+    return _updates["data"]
+
+
+def git_behind():
+    """How many ATAK-CX updates are waiting (None if unknown)."""
+    try:
+        r = subprocess.run(["git", "-C", REPO_DIR, "fetch", "-q", "origin"], capture_output=True, timeout=10)
+    except subprocess.TimeoutExpired:
+        return None
+    if r.returncode != 0:
+        return None
+    n = git("rev-list", "--count", "HEAD..@{u}")
+    return int(n) if n.isdigit() else None
+
+
+def last_update():
+    path = os.path.join(T.TAKCX_HOME, "last-update.log")
+    try:
+        text = open(path, errors="replace").read()[-20000:]
+    except OSError:
+        return None
+    return {"when": datetime.datetime.fromtimestamp(os.path.getmtime(path)), "log": text,
+            "ok": "Update finished" in text}
+
+
 @bp.route("/update", methods=["POST"])
 def update():
-    return start_job("Update ATAK-CX", [["git", "-C", REPO_DIR, "pull", "--ff-only"],
-                                        ["sudo", "-n", "systemctl", "restart", "takcx-manager"]],
+    _updates["at"] = 0  # check again afterwards
+    return start_job("Update everything", [[os.path.join(REPO_DIR, "setup", "update.sh")]],
                      url_for("m.settings"))
 
 
@@ -720,7 +776,8 @@ def settings():
     if request.method == "GET":
         return render_template("settings.html", colors=T.TEAM_COLORS, roles=T.ROLES,
                                coords=T.COORD_FORMATS, secrets_set={k: bool(team.get(k)) for k in SECRET_SETTINGS},
-                               version=git("log", "-1", "--format=%h, %cd", "--date=format:%Y-%m-%d %H:%M"))
+                               version=git("log", "-1", "--format=%h, %cd", "--date=format:%Y-%m-%d %H:%M"),
+                               updates=update_status(wait=True), last_update=last_update())
     f = request.form
     new = {"TEAM_NAME": clean_value(f.get("TEAM_NAME", "")) or team.get("TEAM_NAME", "CX"),
            "DEFAULT_TEAM_COLOR": f.get("DEFAULT_TEAM_COLOR") if f.get("DEFAULT_TEAM_COLOR") in T.TEAM_COLORS else team.get("DEFAULT_TEAM_COLOR", "Cyan"),

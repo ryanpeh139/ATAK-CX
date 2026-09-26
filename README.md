@@ -82,6 +82,7 @@ It opens a page with the right download and steps for their device.
 | `takcx plugin upload FILE.apk` | Push an ATAK plugin to everyone's phone |
 | `takcx elevation --near "Town"` | Detailed terrain data for ATAK's line-of-sight and slope tools |
 | `takcx doctor` | Check that everything is running and reachable |
+| `./setup/update.sh` | Update ATAK-CX, OpenTAKServer and the web map, keeping everyone's links (or Manager → Settings → Update everything) |
 
 The web map and admin panel are at `https://your-server/`, and the **ATAK-CX Manager** at
 `https://your-server/manage/` does everything in this table from a browser ([guide](docs/8-manager.md)).
