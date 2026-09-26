@@ -32,6 +32,10 @@ def main():
         # Always start in the default channel (set by radio_channels.py). With
         # remembering on, OpenTAKServer-checked users land in the top level.
         "rememberchannel": "false",
+        # No "channel listeners" (Mumble 1.4+): Mumla can't show who's listening in, so the
+        # server warns every Mumla user. Turning it off means nobody listens in unseen.
+        "listenersperchannel": "0",
+        "listenersperuser": "0",
         "welcometext": f'"<br />Welcome to the <b>{html.escape(team)}</b> radio. Hold to talk, let go to listen.<br />"',
     }
     disable = ["icesecretread", "icesecretwrite"]
