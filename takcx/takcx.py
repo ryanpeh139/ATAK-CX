@@ -1577,6 +1577,10 @@ def cmd_doctor(args):
     extra = (" 64738 (TCP+UDP)" if radio else "") + (" 1935 8554" if video else "")
     print("\nRemember: a cloud provider firewall or home router also has to let ports\n"
           "443 8089 8443 8446" + extra + " through. See docs/troubleshooting.md.")
+    if team_flag("ROUTER_UPNP"):
+        print("Your router is told to forward them automatically (setup/router-ports.sh --list).")
+    else:
+        print("Home server? ./setup/router-ports.sh can have the router forward them for you.")
     print("\nAll good." if ok else "\nSome checks failed; see the hints above.")
     return 0 if ok else 1
 

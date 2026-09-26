@@ -121,7 +121,15 @@ forwarding won't work. Use **4D (ZeroTier)** or a cloud server.
 
 ### 4C. Port forwarding
 
-In your router: **Port forwarding** (sometimes *Virtual server*, *NAT* or
+**Easiest:** once the install (step 6) is done, run this on the Pi and it asks your router
+to forward everything below by itself, and keeps it that way (needs UPnP, which AmpliFi
+and most home routers have on):
+
+```bash
+cd ~/ATAK-CX && ./setup/router-ports.sh
+```
+
+**Or by hand** in your router: **Port forwarding** (sometimes *Virtual server*, *NAT* or
 *Applications & gaming*). Forward each of these to the Pi's fixed IP from step 3:
 
 | Port | Protocol | For | |

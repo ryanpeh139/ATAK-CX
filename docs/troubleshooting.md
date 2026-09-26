@@ -6,6 +6,21 @@ Start with this on the server. It checks services, DNS, ports and the firewall:
 takcx doctor
 ```
 
+## ATAK works on Wi-Fi but not on mobile data
+
+The router isn't forwarding the ports to the server (on Wi-Fi the phone is inside your
+network, so it never needed them). On the server:
+
+```bash
+cd ~/ATAK-CX && ./setup/router-ports.sh
+```
+
+That has the router forward exactly the ports ATAK-CX uses and re-checks every 30 minutes.
+Then test from a phone with **Wi-Fi off**, or enter your address and port 8089 at
+https://portchecker.co (it should say "open"). If the router has no UPnP, add the forwards by
+hand (docs/INSTALL.md step 4C). If the script says CGNAT, your provider doesn't give you a
+reachable address; use ZeroTier or a cloud server.
+
 ## A phone won't connect (server icon stays red)
 
 Work down the list:
